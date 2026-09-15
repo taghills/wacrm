@@ -1,4 +1,3 @@
-import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
@@ -61,9 +60,9 @@ const SECURITY_HEADERS = [
       "form-action 'self'",
     ].join("; "),
   },
-] as const;
+];
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   // Emit a self-contained server bundle (.next/standalone) so the
   // Docker image can run without node_modules or the Next CLI.
   // Harmless outside Docker: `next start` keeps working as before.
