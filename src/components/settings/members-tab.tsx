@@ -29,6 +29,7 @@ import {
   Mail,
   MailX,
   Plus,
+  Store as StoreIcon,
   Trash2,
   UsersRound,
 } from 'lucide-react';
@@ -67,6 +68,7 @@ import { RequireRole } from '@/components/auth/require-role';
 import { useAuth } from '@/hooks/use-auth';
 import { usePresence } from '@/hooks/use-presence';
 import type { AccountRole } from '@/lib/auth/roles';
+import type { Store } from '@/types';
 import { presenceLabel, summarize } from '@/lib/presence';
 import {
   PRESENCE_DOT_CLASS,
@@ -83,6 +85,8 @@ interface Member {
   avatar_url: string | null;
   role: AccountRole;
   joined_at: string;
+  /** Store binding from migration 043. null = not store-bound. */
+  store_id: string | null;
 }
 
 interface Invitation {
@@ -94,6 +98,11 @@ interface Invitation {
 }
 
 // These roles are translated via `useTranslations("Settings.roles")` where they are used.
+// Sentinel for "no store" in the assignment Select — Base UI
+// Select cannot carry an empty-string value, and null is what the
+// column actually stores.
+const UNASSIGNED = '__none__';
+
 const EDITABLE_ROLES: { value: AccountRole }[] = [
   { value: 'admin' },
   { value: 'agent' },
@@ -131,6 +140,7 @@ export function MembersTab() {
   const { getPresence, getRow, now } = usePresence();
 
   const [members, setMembers] = useState<Member[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -142,12 +152,20 @@ export function MembersTab() {
 
   const loadEverything = useCallback(async () => {
     try {
-      const [mres, ires] = await Promise.all([
+      const [mres, ires, sres] = await Promise.all([
         fetch('/api/account/members', { cache: 'no-store' }),
         canManageMembers
           ? fetch('/api/account/invitations', { cache: 'no-store' })
           : Promise.resolve(null),
+        // Every member may read the store list (stores_select), and
+        // the roster needs the names to label each row.
+        fetch('/api/stores', { cache: 'no-store' }),
       ]);
+
+      if (sres.ok) {
+        const sdata = (await sres.json()) as { stores: Store[] };
+        setStores(sdata.stores);
+      }
 
       if (!mres.ok) {
         const payload = await mres.json().catch(() => ({}));
@@ -179,6 +197,73 @@ export function MembersTab() {
   useEffect(() => {
     void loadEverything();
   }, [loadEverything]);
+
+  // Store assignment. Separate endpoint from the role PATCH because
+  // profiles.store_id is a privilege column (migration 043): 034's
+  // trigger refuses a direct write from the browser, so the route
+  // goes through the set_member_store RPC.
+  //
+  // UNASSIGNED is a sentinel because the Select needs a non-empty
+  // string value; it maps to null on the wire.
+  // Resolve a store id to its display name. A member can point at a
+  // store the list no longer carries (deleted between loads), so fall
+  // back to null and let the caller render "No store" rather than a
+  // raw uuid.
+  function storeName(storeId: string | null): string | null {
+    if (!storeId) return null;
+    return stores.find((st) => st.id === storeId)?.name ?? null;
+  }
+
+  async function handleStoreChange(member: Member, nextValue: string) {
+    const nextStoreId = nextValue === UNASSIGNED ? null : nextValue;
+    if (member.store_id === nextStoreId) return;
+
+    const previousStoreId = member.store_id;
+    setPendingMemberAction(member.user_id);
+    setMembers((prev) =>
+      prev.map((m) =>
+        m.user_id === member.user_id ? { ...m, store_id: nextStoreId } : m,
+      ),
+    );
+    try {
+      const res = await fetch(
+        `/api/account/members/${member.user_id}/store`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store_id: nextStoreId }),
+        },
+      );
+      if (!res.ok) {
+        // Revert, same reasoning as handleRoleChange: a dropdown left
+        // showing an unpersisted value makes the next change no-op
+        // against a wrong baseline.
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.user_id === member.user_id
+              ? { ...m, store_id: previousStoreId }
+              : m,
+          ),
+        );
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error || t('updateStoreFailed'));
+        return;
+      }
+      toast.success(t('storeUpdatedToast'));
+    } catch (err) {
+      console.error('[MembersTab] store change error:', err);
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === member.user_id
+            ? { ...m, store_id: previousStoreId }
+            : m,
+        ),
+      );
+      toast.error(t('networkError'));
+    } finally {
+      setPendingMemberAction(null);
+    }
+  }
 
   async function handleRoleChange(member: Member, nextRole: AccountRole) {
     if (member.role === nextRole) return;
@@ -410,6 +495,49 @@ export function MembersTab() {
                       inline. Items align to the start on mobile so the
                       role dropdown lines up under the avatar. */}
                   <div className="flex items-center gap-2 sm:gap-3">
+                    {/* Store binding. Owner/admin are not store-bound —
+                        they see every store — so the picker is only
+                        meaningful (and only shown) for agent/viewer
+                        rows. The RPC refuses self-assignment, so the
+                        own row renders read-only too. */}
+                    {!isOwnerRow && member.role !== 'admin' ? (
+                      canManageMembers && !isSelf ? (
+                        <Select
+                          value={member.store_id ?? UNASSIGNED}
+                          onValueChange={(v) =>
+                            v && handleStoreChange(member, v)
+                          }
+                        >
+                          <SelectTrigger
+                            className="w-40 bg-muted border-border text-foreground"
+                            disabled={isBusy}
+                            aria-label={t('storeLabel')}
+                          >
+                            <SelectValue>
+                              {storeName(member.store_id) ?? t('noStore')}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={UNASSIGNED}>
+                              {t('noStore')}
+                            </SelectItem>
+                            {stores
+                              .filter((st) => st.active || st.id === member.store_id)
+                              .map((st) => (
+                                <SelectItem key={st.id} value={st.id}>
+                                  {st.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                          <StoreIcon className="size-3.5" />
+                          {storeName(member.store_id) ?? t('noStore')}
+                        </span>
+                      )
+                    ) : null}
+
                     {/* Role display / editor. Inline Select is admin+
                         only AND not allowed on the owner row (owner
                         changes go through transfer, which lands later). */}

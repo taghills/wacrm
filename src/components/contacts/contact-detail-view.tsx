@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { contactHandle } from '@/lib/whatsapp/wa-identity';
+import { ContactStoresCard } from './contact-stores-card';
 
 interface ContactDetailViewProps {
   open: boolean;
@@ -535,6 +536,16 @@ export function ContactDetailView({
                     )}
                     {t('saveChangesBtn')}
                   </Button>
+
+                  {/* Store links. Sits with Details rather than in its
+                      own tab because it is not metadata about the
+                      customer — it decides which staff can open this
+                      record at all. */}
+                  {contactId ? (
+                    <div className="border-t border-border pt-3">
+                      <ContactStoresCard contactId={contactId} />
+                    </div>
+                  ) : null}
                 </div>
               </TabsContent>
 
