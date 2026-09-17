@@ -154,3 +154,33 @@ describe("middleware — redirects never carry Next's internal RSC param", () =>
     expect(location).not.toContain("_rsc");
   });
 });
+
+describe("middleware — every dashboard route is behind the login gate", () => {
+  // The protectedPaths list in middleware.ts has to mirror the route
+  // directories under src/app/(dashboard)/. It drifted once already:
+  // /flows, /agents and /notifications shipped without being added, so
+  // a signed-out visitor got an empty shell instead of the login page.
+  const DASHBOARD_ROUTES = [
+    "/dashboard",
+    "/inbox",
+    "/contacts",
+    "/pipelines",
+    "/broadcasts",
+    "/automations",
+    "/flows",
+    "/agents",
+    "/notifications",
+    "/settings",
+  ];
+
+  for (const route of DASHBOARD_ROUTES) {
+    it(`redirects a signed-out visitor from ${route} to /login`, async () => {
+      mockUser = null;
+
+      const res = await middleware(new NextRequest(`https://app.test${route}`));
+
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location") ?? "").toContain("/login");
+    });
+  }
+});

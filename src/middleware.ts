@@ -93,8 +93,27 @@ export async function middleware(request: NextRequest) {
     return withRefreshedCookies(NextResponse.redirect(stripInternalParams(url)))
   }
 
-  // Protected pages - redirect to login if not authenticated
-  const protectedPaths = ['/dashboard', '/inbox', '/contacts', '/pipelines', '/broadcasts', '/automations', '/settings']
+  // Protected pages - redirect to login if not authenticated.
+  //
+  // This list must mirror the route directories under
+  // src/app/(dashboard)/. It drifted: /flows, /agents and
+  // /notifications shipped without being added, so a signed-out
+  // visitor to those three got no redirect. Not a data leak — RLS
+  // refuses an anonymous reader everything — but they landed on a
+  // shell that renders empty and never explains why, instead of the
+  // login page. Add a path here whenever a page joins that group.
+  const protectedPaths = [
+    '/dashboard',
+    '/inbox',
+    '/contacts',
+    '/pipelines',
+    '/broadcasts',
+    '/automations',
+    '/flows',
+    '/agents',
+    '/notifications',
+    '/settings',
+  ]
   if (!user && protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
