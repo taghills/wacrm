@@ -87,6 +87,13 @@ interface Member {
   joined_at: string;
   /** Store binding from migration 043. null = not store-bound. */
   store_id: string | null;
+  /** UI access role from migration 045. null = account_role defaults. */
+  access_role_id: string | null;
+}
+
+interface AccessRoleOption {
+  id: string;
+  name: string;
 }
 
 interface Invitation {
@@ -141,6 +148,7 @@ export function MembersTab() {
 
   const [members, setMembers] = useState<Member[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [accessRoles, setAccessRoles] = useState<AccessRoleOption[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -152,7 +160,7 @@ export function MembersTab() {
 
   const loadEverything = useCallback(async () => {
     try {
-      const [mres, ires, sres] = await Promise.all([
+      const [mres, ires, sres, ares] = await Promise.all([
         fetch('/api/account/members', { cache: 'no-store' }),
         canManageMembers
           ? fetch('/api/account/invitations', { cache: 'no-store' })
@@ -160,11 +168,17 @@ export function MembersTab() {
         // Every member may read the store list (stores_select), and
         // the roster needs the names to label each row.
         fetch('/api/stores', { cache: 'no-store' }),
+        fetch('/api/access-roles', { cache: 'no-store' }),
       ]);
 
       if (sres.ok) {
         const sdata = (await sres.json()) as { stores: Store[] };
         setStores(sdata.stores);
+      }
+
+      if (ares.ok) {
+        const adata = (await ares.json()) as { roles: AccessRoleOption[] };
+        setAccessRoles(adata.roles);
       }
 
       if (!mres.ok) {
@@ -205,6 +219,62 @@ export function MembersTab() {
   //
   // UNASSIGNED is a sentinel because the Select needs a non-empty
   // string value; it maps to null on the wire.
+  // UI access role. Same optimistic-with-revert shape as the role
+  // and store handlers; the write goes through set_member_access_role
+  // because 034's trigger guards the column.
+  async function handleAccessRoleChange(member: Member, nextValue: string) {
+    const nextId = nextValue === UNASSIGNED ? null : nextValue;
+    if (member.access_role_id === nextId) return;
+
+    const previousId = member.access_role_id;
+    setPendingMemberAction(member.user_id);
+    setMembers((prev) =>
+      prev.map((m) =>
+        m.user_id === member.user_id ? { ...m, access_role_id: nextId } : m,
+      ),
+    );
+    try {
+      const res = await fetch(
+        `/api/account/members/${member.user_id}/access-role`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_role_id: nextId }),
+        },
+      );
+      if (!res.ok) {
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.user_id === member.user_id
+              ? { ...m, access_role_id: previousId }
+              : m,
+          ),
+        );
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error || t('updateAccessRoleFailed'));
+        return;
+      }
+      toast.success(t('accessRoleUpdatedToast'));
+    } catch (err) {
+      console.error('[MembersTab] access role change error:', err);
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === member.user_id
+            ? { ...m, access_role_id: previousId }
+            : m,
+        ),
+      );
+      toast.error(t('networkError'));
+    } finally {
+      setPendingMemberAction(null);
+    }
+  }
+
+  function accessRoleName(roleId: string | null): string | null {
+    if (!roleId) return null;
+    return accessRoles.find((r) => r.id === roleId)?.name ?? null;
+  }
+
   // Resolve a store id to its display name. A member can point at a
   // store the list no longer carries (deleted between loads), so fall
   // back to null and let the caller render "No store" rather than a
@@ -495,6 +565,43 @@ export function MembersTab() {
                       inline. Items align to the start on mobile so the
                       role dropdown lines up under the avatar. */}
                   <div className="flex items-center gap-2 sm:gap-3">
+                    {/* UI access role. Applies to every role including
+                        admins — an admin may legitimately want a
+                        trimmed-down view — but never to the owner,
+                        who must always be able to reach everything to
+                        undo a mistake made here. */}
+                    {!isOwnerRow && accessRoles.length > 0 ? (
+                      canManageMembers ? (
+                        <Select
+                          value={member.access_role_id ?? UNASSIGNED}
+                          onValueChange={(v) =>
+                            v && handleAccessRoleChange(member, v)
+                          }
+                        >
+                          <SelectTrigger
+                            className="w-40 bg-muted border-border text-foreground"
+                            disabled={isBusy}
+                            aria-label={t('accessRoleLabel')}
+                          >
+                            <SelectValue>
+                              {accessRoleName(member.access_role_id) ??
+                                t('defaultAccess')}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={UNASSIGNED}>
+                              {t('defaultAccess')}
+                            </SelectItem>
+                            {accessRoles.map((r) => (
+                              <SelectItem key={r.id} value={r.id}>
+                                {r.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : null
+                    ) : null}
+
                     {/* Store binding. Owner/admin are not store-bound —
                         they see every store — so the picker is only
                         meaningful (and only shown) for agent/viewer

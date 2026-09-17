@@ -4,6 +4,8 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { cn } from '@/lib/utils';
+import { useAccess } from '@/hooks/use-access';
+import type { AccessModule } from '@/lib/access/modules';
 import {
   RAIL_GROUPS,
   SECTION_META,
@@ -33,6 +35,9 @@ export function SettingsRail({
 }) {
   const t = useTranslations('Settings');
   const activeRef = useRef<HTMLButtonElement>(null);
+  // Rendering gate only — the database still decides what a member
+  // may change. See the scope note in @/lib/access/modules.
+  const access = useAccess();
 
   // When horizontal (mobile), keep the active chip in view. On desktop
   // the rail is a static column, so skip.
@@ -57,7 +62,17 @@ export function SettingsRail({
     >
       {RAIL_GROUPS.map(({ label, group }) => {
         const items = SETTINGS_SECTIONS.filter(
-          (s) => SECTION_META[s].group === group,
+          (s) =>
+            SECTION_META[s].group === group &&
+            // Overview is the landing page for the rail itself, so it
+            // is never hidden — a rail with no way back is worse than
+            // one extra entry.
+            // Fail closed while the role resolves, matching
+            // <RequireRole>: a section that flashes in and vanishes
+            // is worse than one that appears a beat late. Overview
+            // keeps the rail from rendering empty meanwhile.
+            (s === 'overview' ||
+              (!access.loading && access.canSee(`settings.${s}` as AccessModule))),
         );
         return (
           <div

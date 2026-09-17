@@ -18,6 +18,9 @@ import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel'
 import { DealsSettings } from '@/components/settings/deals-settings';
 import { MembersTab } from '@/components/settings/members-tab';
 import { StoresPanel } from '@/components/settings/stores-panel';
+import { RolesPanel } from '@/components/settings/roles-panel';
+import { useAccess } from '@/hooks/use-access';
+import type { AccessModule } from '@/lib/access/modules';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import {
   resolveSection,
@@ -32,6 +35,25 @@ import {
 // (the account-menu Settings link points at `?tab=whatsapp`) and can't
 // navigate away. Mirror the login/signup split: a thin wrapper supplies
 // the boundary; the inner component reads the query string.
+/**
+ * Shown when a member deep-links to a settings section their access
+ * role hides. Deliberately plain: it is not an error, and it should
+ * not read like one.
+ */
+function SectionUnavailable() {
+  const t = useTranslations('Settings');
+  return (
+    <div className="rounded-lg border border-border px-6 py-12 text-center">
+      <p className="text-sm font-medium text-foreground">
+        {t('sectionHiddenTitle')}
+      </p>
+      <p className="mx-auto mt-1 max-w-[52ch] text-sm text-muted-foreground">
+        {t('sectionHiddenDesc')}
+      </p>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <Suspense fallback={null}>
@@ -52,6 +74,7 @@ function SettingsPageInner() {
   // app sidebar/header working. Legacy tab values (tags, custom-fields)
   // resolve onto their new home; unknown/empty → the Overview landing.
   const section = resolveSection(searchParams.get('tab'));
+  const access = useAccess();
 
   const go = (next: SettingsSection) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -82,8 +105,17 @@ function SettingsPageInner() {
     deals: <DealsSettings />,
     stores: <StoresPanel />,
     members: <MembersTab />,
+    roles: <RolesPanel />,
     api: <ApiKeysSettings />,
   };
+
+  // A hidden section is still reachable by typing ?tab=. This is a
+  // rendering gate, not a security one — the database refuses the
+  // writes regardless — but showing the panel anyway would make the
+  // rail's omission look like a bug.
+  const sectionVisible =
+    section === 'overview' ||
+    (!access.loading && access.canSee(`settings.${section}` as AccessModule));
 
   return (
     <div>
@@ -98,7 +130,9 @@ function SettingsPageInner() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
         <SettingsRail active={section} onSelect={go} hints={hints} />
-        <div className="min-w-0">{panel[section]}</div>
+        <div className="min-w-0">
+          {sectionVisible ? panel[section] : <SectionUnavailable />}
+        </div>
       </div>
     </div>
   );
