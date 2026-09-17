@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Plus, Store as StoreIcon, Trash2 } from 'lucide-react';
+import { Loader2, Pencil, Plus, Store as StoreIcon, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { Badge } from '@/components/ui/badge';
@@ -46,7 +46,11 @@ export function StoresPanel() {
   const [loading, setLoading] = useState(true);
   const [stores, setStores] = useState<Store[]>([]);
 
-  const [createOpen, setCreateOpen] = useState(false);
+  // One dialog serves both create and edit. `editing` is the store
+  // being renamed, or null for a fresh one — that way the field
+  // limits and validation can't drift between the two paths.
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Store | null>(null);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [saving, setSaving] = useState(false);
@@ -73,27 +77,45 @@ export function StoresPanel() {
     void load();
   }, [load]);
 
-  async function handleCreate() {
+  function openCreate() {
+    setEditing(null);
+    setName('');
+    setCode('');
+    setFormOpen(true);
+  }
+
+  function openEdit(store: Store) {
+    setEditing(store);
+    setName(store.name);
+    setCode(store.code);
+    setFormOpen(true);
+  }
+
+  async function handleSave() {
     if (!name.trim() || !code.trim()) {
       toast.error(t('nameAndCodeRequired'));
       return;
     }
     try {
       setSaving(true);
-      const res = await fetch('/api/stores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), code: code.trim() }),
-      });
+      const res = await fetch(
+        editing ? `/api/stores/${editing.id}` : '/api/stores',
+        {
+          method: editing ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), code: code.trim() }),
+        },
+      );
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        toast.error(json.error ?? t('createFailed'));
+        // The route maps a duplicate code to 409 with a specific
+        // message; surface that rather than the generic fallback.
+        toast.error(json.error ?? (editing ? t('updateFailed') : t('createFailed')));
         return;
       }
-      toast.success(t('created'));
-      setName('');
-      setCode('');
-      setCreateOpen(false);
+      toast.success(editing ? t('updated') : t('created'));
+      setFormOpen(false);
+      setEditing(null);
       await load();
     } finally {
       setSaving(false);
@@ -139,7 +161,7 @@ export function StoresPanel() {
         description={t('description')}
         action={
           <RequireRole min="admin">
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Button size="sm" onClick={openCreate}>
               <Plus className="mr-1.5 size-4" />
               {t('newStore')}
             </Button>
@@ -190,6 +212,14 @@ export function StoresPanel() {
                     <div className="flex shrink-0 items-center gap-1">
                       <Button
                         variant="ghost"
+                        size="icon"
+                        aria-label={t('edit')}
+                        onClick={() => openEdit(store)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
                         size="sm"
                         onClick={() => void handleToggleActive(store)}
                       >
@@ -212,11 +242,21 @@ export function StoresPanel() {
         </CardContent>
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={formOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) setEditing(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('newStore')}</DialogTitle>
-            <DialogDescription>{t('newStoreDesc')}</DialogDescription>
+            <DialogTitle>
+              {editing ? t('editStore') : t('newStore')}
+            </DialogTitle>
+            <DialogDescription>
+              {editing ? t('editStoreDesc') : t('newStoreDesc')}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -243,12 +283,12 @@ export function StoresPanel() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button variant="outline" onClick={() => setFormOpen(false)}>
               {t('cancel')}
             </Button>
-            <Button onClick={() => void handleCreate()} disabled={saving}>
+            <Button onClick={() => void handleSave()} disabled={saving}>
               {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : null}
-              {t('create')}
+              {editing ? t('save') : t('create')}
             </Button>
           </DialogFooter>
         </DialogContent>
