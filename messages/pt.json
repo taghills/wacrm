@@ -470,6 +470,12 @@
       "toastTemplateFailed": "Falha ao enviar o modelo: {reason}"
     },
     "importModal": {
+      "failedRowsHeading": "Linhas com erros",
+      "resultInvalidPhone": "{count} telefone inválido",
+      "resultInvalidPhone_plural": "{count} telefones inválidos",
+      "toastInvalidPhone": "{count} contacto não tinha um número de telefone utilizável",
+      "toastInvalidPhone_plural": "{count} contactos não tinham um número de telefone utilizável",
+      "unknownReason": "Erro desconhecido",
       "title": "Importar contatos",
       "desc": "Envie um CSV com uma coluna <phoneCode>phone</phoneCode> obrigatória. Opcionais: <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> (separadas por vírgula; coloque células com várias tags entre aspas).",
       "uploadDropzone": "Clique para escolher um arquivo CSV",

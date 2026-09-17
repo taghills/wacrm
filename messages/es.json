@@ -470,6 +470,12 @@
       "toastTemplateFailed": "Error al enviar la plantilla: {reason}"
     },
     "importModal": {
+      "failedRowsHeading": "Filas con errores",
+      "resultInvalidPhone": "{count} teléfono no válido",
+      "resultInvalidPhone_plural": "{count} teléfonos no válidos",
+      "toastInvalidPhone": "{count} contacto no tenía un número de teléfono utilizable",
+      "toastInvalidPhone_plural": "{count} contactos no tenían un número de teléfono utilizable",
+      "unknownReason": "Error desconocido",
       "title": "Importar contactos",
       "desc": "Sube un CSV con una columna <phoneCode>phone</phoneCode> obligatoria. Opcionales: <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> (separadas por comas; pon entre comillas las celdas con varias etiquetas).",
       "uploadDropzone": "Haz clic para elegir un archivo CSV",
