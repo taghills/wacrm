@@ -470,6 +470,12 @@
       "toastTemplateFailed": "Falha ao enviar o modelo: {reason}"
     },
     "importModal": {
+      "failedRowsHeading": "Linhas com erros",
+      "resultInvalidPhone": "{count} telefone inválido",
+      "resultInvalidPhone_plural": "{count} telefones inválidos",
+      "toastInvalidPhone": "{count} contacto não tinha um número de telefone utilizável",
+      "toastInvalidPhone_plural": "{count} contactos não tinham um número de telefone utilizável",
+      "unknownReason": "Erro desconhecido",
       "title": "Importar contatos",
       "desc": "Envie um CSV com uma coluna <phoneCode>phone</phoneCode> obrigatória. Opcionais: <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> (separadas por vírgula; coloque células com várias tags entre aspas).",
       "uploadDropzone": "Clique para escolher um arquivo CSV",
@@ -1702,7 +1708,7 @@
       "emptyTitle": "Ainda não há lojas",
       "emptyDesc": "Adicione a sua primeira loja e depois atribua-lhe pessoal em Membros da equipa. Enquanto um membro não tiver loja, não vê clientes."
     },
-    "roles": {
+    "accessRoles": {
       "title": "Funções e acesso",
       "description": "Crie uma função, escolha o que pode ver e depois atribua-a ao pessoal em Membros da equipa.",
       "scopeNote": "Estas funções controlam o que cada pessoa VÊ na aplicação. Não substituem a coluna Função em Membros da equipa, que é a que decide realmente quem pode alterar as definições do WhatsApp, os membros, as lojas e as chaves de API — esses limites aplicam-se sempre. Uma função aqui só pode retirar ecrãs, nunca acrescentar os que a pessoa não tem permissão para usar.",

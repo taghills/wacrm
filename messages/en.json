@@ -1718,7 +1718,7 @@
       "emptyTitle": "No stores yet",
       "emptyDesc": "Add your first store, then assign staff to it from Team members. Until a staff member has a store, they see no customers."
     },
-    "roles": {
+    "accessRoles": {
       "title": "Roles & access",
       "description": "Build a role, choose what it can see, then assign it to staff from Team members.",
       "scopeNote": "These roles control what each person SEES in the app. They do not replace the Role column in Team members, which is what actually decides who can change WhatsApp settings, team members, stores and API keys — those limits always apply. A role here can only take screens away, never add ones the person is not permitted to use.",

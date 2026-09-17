@@ -57,7 +57,11 @@ interface AccessRole {
 }
 
 export function RolesPanel() {
-  const t = useTranslations('Settings.roles');
+  // 'Settings.accessRoles', not 'Settings.roles' — the latter holds
+  // the account-role labels (Owner / Admin / Agent / Viewer) that
+  // members-tab renders, and a second block under the same name
+  // silently replaced them.
+  const t = useTranslations('Settings.accessRoles');
   const canManage = useCan('edit-settings');
 
   const [loading, setLoading] = useState(true);

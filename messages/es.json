@@ -470,6 +470,12 @@
       "toastTemplateFailed": "Error al enviar la plantilla: {reason}"
     },
     "importModal": {
+      "failedRowsHeading": "Filas con errores",
+      "resultInvalidPhone": "{count} teléfono no válido",
+      "resultInvalidPhone_plural": "{count} teléfonos no válidos",
+      "toastInvalidPhone": "{count} contacto no tenía un número de teléfono utilizable",
+      "toastInvalidPhone_plural": "{count} contactos no tenían un número de teléfono utilizable",
+      "unknownReason": "Error desconocido",
       "title": "Importar contactos",
       "desc": "Sube un CSV con una columna <phoneCode>phone</phoneCode> obligatoria. Opcionales: <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> (separadas por comas; pon entre comillas las celdas con varias etiquetas).",
       "uploadDropzone": "Haz clic para elegir un archivo CSV",
@@ -1702,7 +1708,7 @@
       "emptyTitle": "A\u00fan no hay tiendas",
       "emptyDesc": "A\u00f1ade tu primera tienda y luego as\u00edgnale personal desde Miembros del equipo. Hasta que un miembro tenga una tienda, no ver\u00e1 ning\u00fan cliente."
     },
-    "roles": {
+    "accessRoles": {
       "title": "Roles y acceso",
       "description": "Crea un rol, elige qué puede ver y luego asígnalo al personal desde Miembros del equipo.",
       "scopeNote": "Estos roles controlan lo que cada persona VE en la aplicación. No sustituyen a la columna Rol de Miembros del equipo, que es la que realmente decide quién puede cambiar los ajustes de WhatsApp, los miembros, las tiendas y las claves de API: esos límites siempre se aplican. Un rol aquí solo puede quitar pantallas, nunca añadir las que la persona no tiene permitido usar.",
