@@ -316,6 +316,20 @@
     }
   },
   "Contacts": {
+    "stores": {
+      "title": "Tiendas",
+      "loading": "Cargando tiendas\u2026",
+      "noStoresYet": "A\u00fan no se ha creado ninguna tienda.",
+      "clickToLink": "Haz clic para dar acceso a este cliente al personal de esta tienda",
+      "assignedHelp": "El personal de las tiendas seleccionadas puede ver a este cliente y todo su chat.",
+      "unassignedHelp": "Sin tienda asignada: solo los administradores pueden ver a este cliente.",
+      "updateFailed": "No se pudo actualizar el v\u00ednculo con la tienda",
+      "source": {
+        "erp": "Vinculado por un pedido de venta en el ERP",
+        "bot": "Elegido por el cliente en el chat",
+        "manual": "Asignado por un administrador"
+      }
+    },
     "page": {
       "title": "Contactos",
       "subtitle": "Administra tu lista de contactos. {count} contactos en total.",
@@ -1325,6 +1339,10 @@
       "loading": "Cargando…"
     },
     "members": {
+      "storeLabel": "Tienda",
+      "noStore": "Sin tienda",
+      "storeUpdatedToast": "Tienda actualizada",
+      "updateStoreFailed": "No se pudo actualizar la tienda",
       "title": "Miembros del equipo",
       "description": "Personas con acceso a esta cuenta. Los roles controlan lo que cada compañero puede hacer.",
       "inviteMember": "Invitar miembro",
@@ -1647,6 +1665,34 @@
       "wabaSubscribed": "La cuenta de WhatsApp Business está suscrita a esta app: los webhooks entrantes pueden entregarse.",
       "wabaNotSubscribed": "La cuenta de WhatsApp Business no está suscrita a esta app, así que Meta no entregará webhooks entrantes. Vuelve a ingresar el token de acceso y guarda de nuevo para suscribirla."
     },
+    "stores": {
+      "title": "Tiendas",
+      "description": "Tus tiendas f\u00edsicas. Una tienda no es solo una etiqueta: el personal asignado a una tienda solo puede ver los clientes que le pertenecen.",
+      "newStore": "Nueva tienda",
+      "newStoreDesc": "A\u00f1ade una tienda f\u00edsica. Puedes asignarle personal desde Miembros del equipo.",
+      "nameLabel": "Nombre de la tienda",
+      "namePlaceholder": "Shashtri Nagar",
+      "codeLabel": "C\u00f3digo corto",
+      "codePlaceholder": "SHNR",
+      "codeHelp": "Un c\u00f3digo corto usado en exportaciones y por tu ERP. Debe ser \u00fanico.",
+      "nameAndCodeRequired": "El nombre y el c\u00f3digo corto son obligatorios",
+      "create": "Crear tienda",
+      "created": "Tienda creada",
+      "createFailed": "No se pudo crear la tienda",
+      "cancel": "Cancelar",
+      "activate": "Activar",
+      "deactivate": "Desactivar",
+      "inactive": "Inactiva",
+      "updateFailed": "No se pudo actualizar la tienda",
+      "delete": "Eliminar",
+      "deleteTitle": "\u00bfEliminar esta tienda?",
+      "deleteDesc": "Al eliminar {name} se desvincula de ella a todos los clientes y se desasigna a su personal. El personal que quede sin tienda no ver\u00e1 ning\u00fan cliente hasta que lo asignes a otra. Esto no se puede deshacer.",
+      "deleted": "Tienda eliminada",
+      "deleteFailed": "No se pudo eliminar la tienda",
+      "loadFailed": "No se pudieron cargar las tiendas",
+      "emptyTitle": "A\u00fan no hay tiendas",
+      "emptyDesc": "A\u00f1ade tu primera tienda y luego as\u00edgnale personal desde Miembros del equipo. Hasta que un miembro tenga una tienda, no ver\u00e1 ning\u00fan cliente."
+    },
     "sections": {
       "overview": "Resumen",
       "profile": "Tu perfil",
@@ -1657,6 +1703,7 @@
       "quick-replies": "Respuestas rápidas",
       "fields": "Campos y etiquetas",
       "deals": "Negocios y moneda",
+      "stores": "Tiendas",
       "members": "Miembros del equipo",
       "api": "Claves de API"
     },

@@ -21,6 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { useTranslations } from "next-intl";
 import { contactHandle } from "@/lib/whatsapp/wa-identity";
+import { ContactStoresCard } from "@/components/contacts/contact-stores-card";
 
 interface ContactSidebarProps {
   contact: Contact | null;
@@ -185,6 +186,16 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
           </div>
 
           {/* Divider */}
+          <div className="my-4 border-t border-border" />
+
+          {/* Store links. Shown here as well as on the contact record
+              because the inbox is where an admin notices a chat sitting
+              unassigned and wants to route it without leaving the
+              thread. */}
+          <div className="px-1">
+            <ContactStoresCard contactId={contact.id} />
+          </div>
+
           <div className="my-4 border-t border-border" />
 
           {/* Tags */}

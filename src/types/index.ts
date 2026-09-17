@@ -75,6 +75,32 @@ export interface AccountMember {
   avatar_url: string | null;
   role: AccountRole;
   joined_at: string;
+  /**
+   * The store this member is bound to (migration 043), or null for
+   * "not store-bound". The asymmetry matters: for owner/admin null
+   * means every store, for agent/viewer it means no customers at
+   * all until an admin assigns one.
+   */
+  store_id: string | null;
+}
+
+/** A store in the account — one physical retail location. */
+export interface Store {
+  id: string;
+  name: string;
+  /** Short human code, unique per account, used by the ERP sync. */
+  code: string;
+  active: boolean;
+  created_at: string;
+}
+
+/** One customer-to-store link. The store-isolation boundary. */
+export interface ContactStoreLink {
+  store_id: string;
+  /** Where the link came from: a sales order, the bot, or an admin. */
+  source: 'erp' | 'bot' | 'manual';
+  created_at: string;
+  stores: Store | null;
 }
 
 /**

@@ -316,6 +316,20 @@
     }
   },
   "Contacts": {
+    "stores": {
+      "title": "Lojas",
+      "loading": "A carregar lojas…",
+      "noStoresYet": "Ainda não foi criada nenhuma loja.",
+      "clickToLink": "Clique para dar ao pessoal desta loja acesso a este cliente",
+      "assignedHelp": "O pessoal das lojas selecionadas pode ver este cliente e toda a sua conversa.",
+      "unassignedHelp": "Sem loja atribuída — só os administradores conseguem ver este cliente.",
+      "updateFailed": "Não foi possível atualizar a ligação à loja",
+      "source": {
+        "erp": "Associado por uma encomenda de venda no ERP",
+        "bot": "Escolhido pelo cliente na conversa",
+        "manual": "Atribuído por um administrador"
+      }
+    },
     "page": {
       "title": "Contatos",
       "subtitle": "Gerencie sua lista de contatos. {count} contatos no total.",
@@ -1325,6 +1339,10 @@
       "loading": "Carregando…"
     },
     "members": {
+      "storeLabel": "Loja",
+      "noStore": "Sem loja",
+      "storeUpdatedToast": "Loja atualizada",
+      "updateStoreFailed": "Não foi possível atualizar a loja",
       "title": "Membros da equipe",
       "description": "Pessoas com acesso a esta conta. As funções controlam o que cada colega pode fazer.",
       "inviteMember": "Convidar membro",
@@ -1647,6 +1665,34 @@
       "wabaSubscribed": "A conta do WhatsApp Business está inscrita neste app — os webhooks de entrada podem ser entregues.",
       "wabaNotSubscribed": "A conta do WhatsApp Business não está inscrita neste app, então a Meta não entregará webhooks de entrada. Informe novamente o token de acesso e salve de novo para inscrevê-la."
     },
+    "stores": {
+      "title": "Lojas",
+      "description": "As suas lojas físicas. Uma loja não é apenas um rótulo — o pessoal atribuído a uma loja só consegue ver os clientes que pertencem a ela.",
+      "newStore": "Nova loja",
+      "newStoreDesc": "Adicione uma loja física. Pode atribuir-lhe pessoal em Membros da equipa.",
+      "nameLabel": "Nome da loja",
+      "namePlaceholder": "Shashtri Nagar",
+      "codeLabel": "Código curto",
+      "codePlaceholder": "SHNR",
+      "codeHelp": "Um código curto usado nas exportações e pelo seu ERP. Tem de ser único.",
+      "nameAndCodeRequired": "O nome e o código curto são ambos obrigatórios",
+      "create": "Criar loja",
+      "created": "Loja criada",
+      "createFailed": "Não foi possível criar a loja",
+      "cancel": "Cancelar",
+      "activate": "Ativar",
+      "deactivate": "Desativar",
+      "inactive": "Inativa",
+      "updateFailed": "Não foi possível atualizar a loja",
+      "delete": "Eliminar",
+      "deleteTitle": "Eliminar esta loja?",
+      "deleteDesc": "Eliminar {name} desassocia todos os clientes dela e retira a atribuição do seu pessoal. O pessoal que ficar sem loja não vê cliente nenhum até o atribuir a outra. Isto não pode ser desfeito.",
+      "deleted": "Loja eliminada",
+      "deleteFailed": "Não foi possível eliminar a loja",
+      "loadFailed": "Não foi possível carregar as lojas",
+      "emptyTitle": "Ainda não há lojas",
+      "emptyDesc": "Adicione a sua primeira loja e depois atribua-lhe pessoal em Membros da equipa. Enquanto um membro não tiver loja, não vê clientes."
+    },
     "sections": {
       "overview": "Visão geral",
       "profile": "Seu perfil",
@@ -1657,6 +1703,7 @@
       "quick-replies": "Respostas rápidas",
       "fields": "Campos e tags",
       "deals": "Negócios e moeda",
+      "stores": "Lojas",
       "members": "Membros da equipe",
       "api": "Chaves de API"
     },
