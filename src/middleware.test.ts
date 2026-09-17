@@ -111,3 +111,46 @@ describe("middleware — refreshed auth cookies survive redirects", () => {
     expect(res.cookies.get(ROTATED.name)?.value).toBe(ROTATED.value);
   });
 });
+
+describe("middleware — redirects never carry Next's internal RSC param", () => {
+  // `?_rsc=<hash>` belongs to the router's data fetch, not to a page.
+  // A redirect that forwards it makes the router hard-navigate to that
+  // URL, and the browser then renders the RSC payload as text — a wall
+  // of `1:"$Sreact.fragment"` with `?_rsc=` in the address bar.
+
+  it("strips _rsc when sending an unauth user to /login", async () => {
+    mockUser = null;
+
+    const res = await middleware(
+      new NextRequest("https://app.test/dashboard?_rsc=ESMN0uHFtARRz41R"),
+    );
+
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("/login");
+    expect(location).not.toContain("_rsc");
+  });
+
+  it("strips _rsc when sending a signed-in user off /login", async () => {
+    mockUser = { id: "user-1" };
+
+    const res = await middleware(
+      new NextRequest("https://app.test/login?_rsc=ESMN0uHFtARRz41R"),
+    );
+
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("/dashboard");
+    expect(location).not.toContain("_rsc");
+  });
+
+  it("keeps the caller's own query while dropping _rsc", async () => {
+    mockUser = null;
+
+    const res = await middleware(
+      new NextRequest("https://app.test/settings?tab=stores&_rsc=abc123"),
+    );
+
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("tab=stores");
+    expect(location).not.toContain("_rsc");
+  });
+});
