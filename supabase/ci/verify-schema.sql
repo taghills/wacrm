@@ -96,6 +96,32 @@ BEGIN
       'can_access_contact() is missing — migration 043 did not apply';
   END IF;
 
+  -- 046's row-based helper and the deferrable FK it depends on.
+  -- Without both, INSERT ... RETURNING on contacts is rejected for
+  -- every role — the whole point of that migration.
+  IF to_regprocedure('public.can_access_contact_row(uuid, uuid, account_role_enum)') IS NULL THEN
+    RAISE EXCEPTION
+      'can_access_contact_row() is missing — migration 046 did not apply';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'contact_stores_contact_id_fkey'
+      AND condeferrable AND condeferred
+  ) THEN
+    RAISE EXCEPTION
+      'contact_stores_contact_id_fkey is not DEFERRABLE INITIALLY DEFERRED — migration 046 did not apply';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'link_new_contact_to_creator_store'
+      AND tgrelid = 'public.contacts'::regclass
+      -- tgtype bit 1 set = BEFORE. 046 moved this from AFTER.
+      AND (tgtype & 2) = 2
+  ) THEN
+    RAISE EXCEPTION
+      'link_new_contact_to_creator_store is not a BEFORE trigger — migration 046 did not apply';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;
