@@ -56,6 +56,19 @@ interface AccessRole {
   created_at: string;
 }
 
+/**
+ * Module id -> catalogue key.
+ *
+ * next-intl reads a dot as a path separator, so `modules.settings.api`
+ * would be looked up as modules -> settings -> api and miss the flat
+ * key entirely, rendering the raw path on screen. The ids keep their
+ * dots (they are namespaced deliberately); the catalogue keys use
+ * underscores.
+ */
+function moduleLabelKey(module: AccessModule): string {
+  return module.replace(/\./g, '_');
+}
+
 export function RolesPanel() {
   // 'Settings.accessRoles', not 'Settings.roles' — the latter holds
   // the account-role labels (Owner / Admin / Agent / Viewer) that
@@ -186,7 +199,7 @@ export function RolesPanel() {
                 className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50"
               >
                 <span className="min-w-0 truncate text-sm text-foreground">
-                  {t(`modules.${m}`)}
+                  {t(`modules.${moduleLabelKey(m)}`)}
                 </span>
                 <div className="flex shrink-0 gap-1">
                   {ACCESS_LEVELS.map((lvl) => (
