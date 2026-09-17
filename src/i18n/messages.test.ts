@@ -254,6 +254,51 @@ function nextIntlParses(message: string): boolean {
   return code !== 'INVALID_MESSAGE';
 }
 
+/**
+ * Collect every duplicated key path in a catalogue.
+ *
+ * `JSON.parse` keeps the last of two same-named siblings and drops
+ * the first without a word, so a catalogue can lose a whole block
+ * and still parse, still pass parity (the surviving block supplies
+ * its own leaves), and still typecheck — while the screen renders
+ * raw keypaths. That is exactly how a second `Settings.roles` block
+ * replaced the account-role labels (Owner / Admin / Agent / Viewer).
+ *
+ * Reviver-based detection: the reviver runs per key/value pair with
+ * `this` bound to the containing object, so a key already present on
+ * `this` by the time we see it again is a duplicate.
+ */
+function findDuplicateKeys(locale: string): string[] {
+  const raw = readFileSync(join(MESSAGES_DIR, `${locale}.json`), 'utf8');
+  const dupes: string[] = [];
+  const seen = new WeakMap<object, Set<string>>();
+
+  JSON.parse(raw, function reviver(this: object, key, value) {
+    if (key === '') return value;
+    let keys = seen.get(this);
+    if (!keys) {
+      keys = new Set();
+      seen.set(this, keys);
+    }
+    if (keys.has(key)) dupes.push(key);
+    keys.add(key);
+    return value;
+  });
+
+  return dupes;
+}
+
+describe('message catalogue duplicate keys', () => {
+  for (const locale of [SOURCE_LOCALE, ...TRANSLATED_LOCALES]) {
+    it(`${locale}.json has no duplicated keys`, () => {
+      expect(
+        findDuplicateKeys(locale),
+        `${locale}.json declares these keys twice; the later block silently replaces the earlier one`,
+      ).toEqual([]);
+    });
+  }
+});
+
 describe('message catalogue parity', () => {
   const source = loadKeys(SOURCE_LOCALE);
 

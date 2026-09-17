@@ -1702,7 +1702,7 @@
       "emptyTitle": "A\u00fan no hay tiendas",
       "emptyDesc": "A\u00f1ade tu primera tienda y luego as\u00edgnale personal desde Miembros del equipo. Hasta que un miembro tenga una tienda, no ver\u00e1 ning\u00fan cliente."
     },
-    "roles": {
+    "accessRoles": {
       "title": "Roles y acceso",
       "description": "Crea un rol, elige qué puede ver y luego asígnalo al personal desde Miembros del equipo.",
       "scopeNote": "Estos roles controlan lo que cada persona VE en la aplicación. No sustituyen a la columna Rol de Miembros del equipo, que es la que realmente decide quién puede cambiar los ajustes de WhatsApp, los miembros, las tiendas y las claves de API: esos límites siempre se aplican. Un rol aquí solo puede quitar pantallas, nunca añadir las que la persona no tiene permitido usar.",
