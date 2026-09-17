@@ -75,6 +75,27 @@ BEGIN
       'messages.error_code/error_title/error_details are missing — migration 042 did not apply';
   END IF;
 
+  -- Store isolation, from 043. The stores tables plus the helper
+  -- every store-scoped policy calls — a missing helper would make
+  -- the policies fail open at query time, not at apply time.
+  IF to_regclass('public.stores') IS NULL THEN
+    RAISE EXCEPTION 'public.stores is missing — migration 043 did not apply';
+  END IF;
+  IF to_regclass('public.contact_stores') IS NULL THEN
+    RAISE EXCEPTION 'public.contact_stores is missing — migration 043 did not apply';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles'
+      AND column_name = 'store_id'
+  ) THEN
+    RAISE EXCEPTION 'profiles.store_id is missing — migration 043 did not apply';
+  END IF;
+  IF to_regprocedure('public.can_access_contact(uuid, account_role_enum)') IS NULL THEN
+    RAISE EXCEPTION
+      'can_access_contact() is missing — migration 043 did not apply';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;
