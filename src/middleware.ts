@@ -1,6 +1,30 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Next's client router appends `?_rsc=<hash>` to the React Server
+// Component fetches it makes behind a <Link>. That param belongs to
+// the data request, never to a page the browser shows.
+//
+// A middleware redirect that carries it forward is how it escapes: the
+// router turns the redirect into a hard navigation, the browser loads
+// the redirect target as a document, and the server answers that URL
+// with the RSC payload — so the user gets a screenful of raw
+// `1:"$Sreact.fragment"` instead of a page, with `?_rsc=` sitting in
+// the address bar (reported against /dashboard).
+//
+// The /login branch below already cleared the whole query string. The
+// protected-path branch cloned it verbatim, which is where this came
+// from. Strip the internal params on every redirect rather than
+// per-branch, so a future branch can't reintroduce it — and keep the
+// caller's own query (e.g. ?invite=, ?tab=), which clearing wholesale
+// would have thrown away.
+const INTERNAL_PARAMS = ['_rsc'] as const
+
+const stripInternalParams = (url: URL): URL => {
+  INTERNAL_PARAMS.forEach((param) => url.searchParams.delete(param))
+  return url
+}
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -66,15 +90,34 @@ export async function middleware(request: NextRequest) {
       url.pathname = '/dashboard'
       url.search = ''
     }
-    return withRefreshedCookies(NextResponse.redirect(url))
+    return withRefreshedCookies(NextResponse.redirect(stripInternalParams(url)))
   }
 
-  // Protected pages - redirect to login if not authenticated
-  const protectedPaths = ['/dashboard', '/inbox', '/contacts', '/pipelines', '/broadcasts', '/automations', '/settings']
+  // Protected pages - redirect to login if not authenticated.
+  //
+  // This list must mirror the route directories under
+  // src/app/(dashboard)/. It drifted: /flows, /agents and
+  // /notifications shipped without being added, so a signed-out
+  // visitor to those three got no redirect. Not a data leak — RLS
+  // refuses an anonymous reader everything — but they landed on a
+  // shell that renders empty and never explains why, instead of the
+  // login page. Add a path here whenever a page joins that group.
+  const protectedPaths = [
+    '/dashboard',
+    '/inbox',
+    '/contacts',
+    '/pipelines',
+    '/broadcasts',
+    '/automations',
+    '/flows',
+    '/agents',
+    '/notifications',
+    '/settings',
+  ]
   if (!user && protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    return withRefreshedCookies(NextResponse.redirect(url))
+    return withRefreshedCookies(NextResponse.redirect(stripInternalParams(url)))
   }
 
   // API routes that need auth (not webhooks)
