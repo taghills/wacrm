@@ -1666,6 +1666,11 @@
       "wabaNotSubscribed": "A conta do WhatsApp Business não está inscrita neste app, então a Meta não entregará webhooks de entrada. Informe novamente o token de acesso e salve de novo para inscrevê-la."
     },
     "stores": {
+      "edit": "Editar",
+      "editStore": "Editar loja",
+      "editStoreDesc": "Mude o nome desta loja ou o seu código curto. As atribuições de pessoal e clientes não são afetadas.",
+      "save": "Guardar alterações",
+      "updated": "Loja atualizada",
       "title": "Lojas",
       "description": "As suas lojas físicas. Uma loja não é apenas um rótulo — o pessoal atribuído a uma loja só consegue ver os clientes que pertencem a ela.",
       "newStore": "Nova loja",

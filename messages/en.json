@@ -1682,6 +1682,11 @@
       "wabaNotSubscribed": "The WhatsApp Business Account is not subscribed to this app, so Meta will not deliver inbound webhooks. Re-enter the access token and save again to subscribe it."
     },
     "stores": {
+      "edit": "Edit",
+      "editStore": "Edit store",
+      "editStoreDesc": "Rename this store or change its short code. Staff and customer assignments are not affected.",
+      "save": "Save changes",
+      "updated": "Store updated",
       "title": "Stores",
       "description": "Your physical stores. A store is not just a label \u2014 staff assigned to a store can only see customers who belong to it.",
       "newStore": "New store",
