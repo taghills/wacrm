@@ -105,6 +105,15 @@ const bottomNavItems = [
   { href: "/settings", labelKey: "settings", icon: Settings },
 ];
 
+/**
+ * Nav href -> access module id. Every route matches its path
+ * segment except /agents, which the catalogue calls `agents` and
+ * the sidebar labels "AI Agents".
+ */
+function moduleForHref(href: string): AccessModule {
+  return href.replace(/^\//, "") as AccessModule;
+}
+
 interface SidebarProps {
   /** Controlled on mobile by the Header's hamburger button. Ignored on lg+. */
   open?: boolean;
@@ -112,12 +121,18 @@ interface SidebarProps {
 }
 
 import { useTranslations } from "next-intl";
+import { useAccess } from "@/hooks/use-access";
+import type { AccessModule } from "@/lib/access/modules";
 
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
   const totalUnread = useTotalUnread();
+  // Which nav rows this member is shown. Rendering only — the
+  // database is what stops them changing anything. See the scope
+  // note in @/lib/access/modules.
+  const access = useAccess();
   const unreadNotifications = useUnreadNotifications();
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
@@ -208,7 +223,12 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Main navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
+            {navItems
+              .filter(
+                (item) =>
+                  !access.loading && access.canSee(moduleForHref(item.href)),
+              )
+              .map((item) => {
               const isActive =
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -271,7 +291,12 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           <div className="my-4 border-t border-border" />
 
           <ul className="flex flex-col gap-1">
-            {bottomNavItems.map((item) => {
+            {bottomNavItems
+              .filter(
+                (item) =>
+                  !access.loading && access.canSee(moduleForHref(item.href)),
+              )
+              .map((item) => {
               const isActive = pathname.startsWith(item.href);
               return (
                 <li key={item.href}>

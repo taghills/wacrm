@@ -26,6 +26,7 @@ interface ProfileRow {
   account_role: string;
   created_at: string;
   store_id: string | null;
+  access_role_id: string | null;
 }
 
 export async function GET() {
@@ -37,7 +38,7 @@ export async function GET() {
     const { data, error } = await ctx.supabase
       .from("profiles")
       .select(
-        "user_id, full_name, email, avatar_url, account_role, created_at, store_id",
+        "user_id, full_name, email, avatar_url, account_role, created_at, store_id, access_role_id",
       )
       .eq("account_id", ctx.accountId)
       .order("created_at", { ascending: true });
@@ -69,6 +70,9 @@ export async function GET() {
           // NULL means not store-bound: every store for owner/admin,
           // and nothing at all for agent/viewer.
           store_id: row.store_id,
+          // UI access role (migration 045). Rendering only — it never
+          // widens what the account_role permits.
+          access_role_id: row.access_role_id,
         },
       ];
     });

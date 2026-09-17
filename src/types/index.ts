@@ -82,6 +82,12 @@ export interface AccountMember {
    * all until an admin assigns one.
    */
   store_id: string | null;
+  /**
+   * UI access role (migration 045), or null for the defaults that
+   * come with `role`. Controls what the member is shown, never what
+   * they are permitted to change.
+   */
+  access_role_id: string | null;
 }
 
 /** A store in the account — one physical retail location. */
