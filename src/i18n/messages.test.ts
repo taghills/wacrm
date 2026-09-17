@@ -288,6 +288,46 @@ function findDuplicateKeys(locale: string): string[] {
   return dupes;
 }
 
+/**
+ * Every key path in a catalogue whose final segment contains a dot.
+ *
+ * next-intl resolves a dot in `t('a.b.c')` as a path separator, so a
+ * flat key literally named "settings.profile" is unreachable: the
+ * lookup descends into a `settings` group that does not exist, and
+ * next-intl renders the raw path on screen. It is not a parse error,
+ * a type error, or a parity failure — the key is present and
+ * accounted for, just impossible to read — so nothing else here
+ * catches it. The Roles & access panel shipped with twelve of them.
+ *
+ * Use underscores for ids that carry a namespace, and convert at the
+ * lookup site.
+ */
+function findDottedKeys(locale: string): string[] {
+  const out: string[] = [];
+  const walk = (node: unknown, path: string) => {
+    if (node && typeof node === 'object' && !Array.isArray(node)) {
+      for (const [k, v] of Object.entries(node)) {
+        const next = path ? `${path}.${k}` : k;
+        if (k.includes('.')) out.push(next);
+        walk(v, next);
+      }
+    }
+  };
+  walk(loadCatalogue(locale), '');
+  return out;
+}
+
+describe('message catalogue key paths are reachable', () => {
+  for (const locale of [SOURCE_LOCALE, ...TRANSLATED_LOCALES]) {
+    it(`${locale}.json has no keys containing a dot`, () => {
+      expect(
+        findDottedKeys(locale),
+        `${locale}.json has keys whose name contains a dot; next-intl reads that as a path separator, so they can never be looked up`,
+      ).toEqual([]);
+    });
+  }
+});
+
 describe('message catalogue duplicate keys', () => {
   for (const locale of [SOURCE_LOCALE, ...TRANSLATED_LOCALES]) {
     it(`${locale}.json has no duplicated keys`, () => {
