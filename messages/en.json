@@ -61,6 +61,10 @@
   "ModeToggle": {
     "switchMode": "Switch to {mode} mode"
   },
+  "StoreAccess": {
+    "title": "No store assigned yet",
+    "body": "Your account is not assigned to a store, so no customers are visible to you. Ask an admin to assign you one in Settings → Team members."
+  },
   "AccountAccess": {
     "unlinkedTitle": "This user is not linked to an account",
     "unlinkedBody": "Nothing you change will be saved while this is unresolved — the database rejects every write from a user with no account or role. If you were invited to a team, ask the owner to re-send the invitation. On a self-hosted install, check that the account-bootstrap migration ran for this user.",
@@ -1730,6 +1734,7 @@
       "nameRequired": "A role name is required",
       "groupWorkspace": "Main menu",
       "groupSettings": "Settings sections",
+      "settingsGroupNote": "These apply only to members whose Role is Admin or Owner. For an Agent or Viewer these sections stay hidden whatever you choose here, because the database refuses their changes anyway — change their Role first if they need one.",
       "create": "Create role",
       "save": "Save changes",
       "cancel": "Cancel",

@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { AccountAccessAlert } from "@/components/layout/account-access-alert";
+import { StoreAccessAlert } from "@/components/layout/store-access-alert";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
 import { BrowserNotificationsListener } from "@/components/notifications/browser-notifications-listener";
 import { useModuleRedirect } from "@/hooks/use-module-redirect";
@@ -64,6 +65,10 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
           {/* Above every page: writes are being rejected and here's why.
               Renders nothing unless the account/role failed to resolve. */}
           <AccountAccessAlert />
+          {/* Same idea one level down: the account resolved, but a
+              store-bound member without a store matches no customer,
+              so every screen is empty for a reason nothing states. */}
+          <StoreAccessAlert />
           {children}
         </main>
       </div>

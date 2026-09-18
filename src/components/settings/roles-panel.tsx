@@ -184,12 +184,21 @@ export function RolesPanel() {
     (m) => MODULE_META[m].group === 'settings',
   );
 
-  function renderGroup(title: string, modules: readonly AccessModule[]) {
+  function renderGroup(
+    title: string,
+    modules: readonly AccessModule[],
+    note?: string,
+  ) {
     return (
       <div className="space-y-2">
         <p className="text-[11px] font-semibold tracking-[0.09em] text-muted-foreground uppercase">
           {title}
         </p>
+        {note ? (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {note}
+          </p>
+        ) : null}
         <div className="space-y-1">
           {modules.map((m) => {
             const current = perms[m] ?? 'edit';
@@ -336,7 +345,11 @@ export function RolesPanel() {
             </div>
 
             {renderGroup(t('groupWorkspace'), workspaceModules)}
-            {renderGroup(t('groupSettings'), settingsModules)}
+            {renderGroup(
+              t('groupSettings'),
+              settingsModules,
+              t('settingsGroupNote'),
+            )}
           </div>
 
           <DialogFooter>
