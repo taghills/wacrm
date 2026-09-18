@@ -143,6 +143,36 @@ BEGIN
     END IF;
   END;
 
+  -- 048: RLS says which rows; a GRANT says whether the role may open
+  -- the table at all. This repo shipped policies without grants for
+  -- 35 of 38 tables, so a database built from migrations alone came
+  -- up with "permission denied for table profiles" and production
+  -- only worked because of a hand-run repair nobody recorded.
+  --
+  -- Every table carrying a policy must therefore be grantable. This
+  -- is the check that turns "it works on the live database" into
+  -- "it works on any database built from this repo".
+  DECLARE
+    ungranted TEXT;
+  BEGIN
+    SELECT string_agg(DISTINCT c.relname, ', ')
+    INTO ungranted
+    FROM pg_policy pol
+    JOIN pg_class c ON c.oid = pol.polrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+    WHERE c.relkind = 'r'
+      AND NOT EXISTS (
+        SELECT 1 FROM information_schema.role_table_grants g
+        WHERE g.table_schema = 'public'
+          AND g.table_name = c.relname
+          AND g.grantee = 'authenticated'
+      );
+    IF ungranted IS NOT NULL THEN
+      RAISE EXCEPTION
+        'these tables have RLS policies but no GRANT to authenticated (%) — they will fail with "permission denied"', ungranted;
+    END IF;
+  END;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;
