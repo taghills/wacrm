@@ -61,6 +61,10 @@
   "ModeToggle": {
     "switchMode": "Cambiar al modo {mode}"
   },
+  "StoreAccess": {
+    "title": "Aún no tienes tienda asignada",
+    "body": "Tu cuenta no está asignada a ninguna tienda, por lo que no ves ningún cliente. Pide a un administrador que te asigne una en Ajustes → Miembros del equipo."
+  },
   "AccountAccess": {
     "unlinkedTitle": "Este usuario no está vinculado a una cuenta",
     "unlinkedBody": "Nada de lo que cambies se guardará mientras esto no se resuelva: la base de datos rechaza toda escritura de un usuario sin cuenta ni rol. Si te invitaron a un equipo, pide al propietario que reenvíe la invitación. En una instalación propia, verifica que la migración de bootstrap de la cuenta se haya ejecutado para este usuario.",
@@ -1720,6 +1724,7 @@
       "nameRequired": "El nombre del rol es obligatorio",
       "groupWorkspace": "Menú principal",
       "groupSettings": "Secciones de ajustes",
+      "settingsGroupNote": "Solo se aplican a los miembros cuyo Rol es Administrador o Propietario. Para un Agente o Visor estas secciones permanecen ocultas elijas lo que elijas aquí, porque la base de datos rechaza sus cambios de todos modos: cambia antes su Rol si necesitan acceso.",
       "create": "Crear rol",
       "save": "Guardar cambios",
       "cancel": "Cancelar",

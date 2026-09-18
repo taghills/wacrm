@@ -61,6 +61,10 @@
   "ModeToggle": {
     "switchMode": "Mudar para o modo {mode}"
   },
+  "StoreAccess": {
+    "title": "Ainda sem loja atribuída",
+    "body": "A tua conta não está atribuída a nenhuma loja, por isso não vês nenhum cliente. Pede a um administrador que te atribua uma em Definições → Membros da equipa."
+  },
   "AccountAccess": {
     "unlinkedTitle": "Este usuário não está vinculado a uma conta",
     "unlinkedBody": "Nada do que você alterar será salvo enquanto isso não for resolvido — o banco de dados rejeita toda gravação de um usuário sem conta ou função. Se você foi convidado para uma equipe, peça ao proprietário para reenviar o convite. Em uma instalação própria, verifique se a migração de bootstrap da conta foi executada para este usuário.",
@@ -1720,6 +1724,7 @@
       "nameRequired": "O nome da função é obrigatório",
       "groupWorkspace": "Menu principal",
       "groupSettings": "Secções das definições",
+      "settingsGroupNote": "Aplicam-se apenas a membros cuja Função é Administrador ou Proprietário. Para um Agente ou Observador estas secções continuam ocultas independentemente do que escolheres aqui, porque a base de dados recusa as suas alterações de qualquer forma — muda primeiro a Função se precisarem de acesso.",
       "create": "Criar função",
       "save": "Guardar alterações",
       "cancel": "Cancelar",

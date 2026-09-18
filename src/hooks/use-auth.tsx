@@ -35,6 +35,13 @@ interface Profile {
   beta_features: string[];
   account_id: string | null;
   account_role: AccountRole | null;
+  /**
+   * Store binding (migration 043). NULL means "not store-bound":
+   * every store for owner/admin, and NO customers at all for
+   * agent/viewer until an admin assigns one — which is what
+   * StoreAccessAlert exists to say out loud.
+   */
+  store_id: string | null;
 }
 
 interface AccountSummary {
@@ -152,6 +159,7 @@ interface ProfileRow {
   beta_features: string[] | null;
   account_id: string | null;
   account_role: string | null;
+  store_id: string | null;
 }
 
 /**
@@ -192,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await supabase
           .from("profiles")
           .select(
-            "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
+            "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, store_id",
           )
           .eq("user_id", userId)
           .maybeSingle();
@@ -280,6 +288,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           beta_features: data.beta_features ?? [],
           account_id: data.account_id ?? null,
           account_role: accountRole,
+          // Store binding (migration 043). NULL means "not store-bound",
+          // which is every store for owner/admin and NO customers at all
+          // for agent/viewer — see StoreAccessAlert.
+          store_id: data.store_id ?? null,
         });
         setAccount(accountRow);
         if (!data.account_id || !accountRole) {

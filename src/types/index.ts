@@ -46,6 +46,12 @@ export interface Profile {
    */
   account_role?: AccountRole;
   created_at: string;
+  /**
+   * Store binding (migration 043), or null for "not store-bound" —
+   * every store for owner/admin, and no customers at all for
+   * agent/viewer until an admin assigns one.
+   */
+  store_id: string | null;
 }
 
 // ============================================================
