@@ -122,6 +122,27 @@ BEGIN
       'link_new_contact_to_creator_store is not a BEFORE trigger — migration 046 did not apply';
   END IF;
 
+  -- 047: the tables that reach a customer by a route other than the
+  -- conversation. 043 secured the conversation path and missed these,
+  -- so a store agent could read another store's deals, broadcast
+  -- recipients and flow runs. Assert each SELECT policy actually
+  -- mentions the store-aware helper.
+  DECLARE
+    leaky TEXT;
+  BEGIN
+    SELECT string_agg(c.relname, ', ')
+    INTO leaky
+    FROM pg_policy pol
+    JOIN pg_class c ON c.oid = pol.polrelid
+    WHERE c.relname IN ('deals', 'broadcast_recipients', 'flow_runs', 'automation_logs')
+      AND pol.polcmd = 'r'
+      AND pg_get_expr(pol.polqual, pol.polrelid) NOT LIKE '%can_access_contact%';
+    IF leaky IS NOT NULL THEN
+      RAISE EXCEPTION
+        'these SELECT policies are not store-aware (%) — migration 047 did not apply', leaky;
+    END IF;
+  END;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;
