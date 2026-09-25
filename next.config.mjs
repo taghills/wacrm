@@ -3,6 +3,14 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 /**
+ * The one origin allowed to embed this app in an iframe: the TAGHills
+ * ERP, whose "CRM" tab renders wa.taghills.com inline.
+ *
+ * Scheme and host only, no path — frame-ancestors matches origins.
+ */
+const ERP_ORIGIN = "https://erp.taghills.com";
+
+/**
  * Baseline security headers applied to every response.
  *
  * CSP ships as `Content-Security-Policy-Report-Only` so the browser
@@ -12,11 +20,18 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
  *
  * The rest of the headers are straight blocks, safe to enforce today:
  *   - HSTS: only meaningful on HTTPS (no-op on http://localhost).
- *   - X-Content-Type-Options / X-Frame-Options / Referrer-Policy:
- *     baseline OWASP hardening, no behavioural cost.
+ *   - X-Content-Type-Options / Referrer-Policy: baseline OWASP
+ *     hardening, no behavioural cost.
  *   - Permissions-Policy: we don't use camera / microphone / etc, so
  *     deny them. A supply-chain compromise or a forgotten plugin
  *     can't silently opt back in.
+ *
+ * Framing is the one exception to "CSP is report-only here". The ERP
+ * at erp.taghills.com embeds this app in an iframe on its CRM tab, so
+ * framing must be allowed for that one origin and refused for every
+ * other. See FRAME_ANCESTORS below — it is a real, enforcing
+ * Content-Security-Policy header carrying a single directive, kept
+ * separate from the report-only policy above it.
  */
 const SECURITY_HEADERS = [
   {
@@ -24,7 +39,6 @@ const SECURITY_HEADERS = [
     value: "max-age=63072000; includeSubDomains; preload",
   },
   { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     // Microphone is allowed for same-origin (`self`) so the inbox
@@ -55,12 +69,41 @@ const SECURITY_HEADERS = [
       // Supabase REST + realtime (WSS). All Meta API calls happen
       // server-side, so graph.facebook.com does not belong here.
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-      "frame-ancestors 'none'",
+      // Mirrors the enforced FRAME_ANCESTORS policy below. Left at
+      // 'none' this would report a violation on every legitimate ERP
+      // page view, which is exactly the noise report-only mode is
+      // meant to make meaningful.
+      `frame-ancestors ${ERP_ORIGIN}`,
       "base-uri 'self'",
       "form-action 'self'",
     ].join("; "),
   },
 ];
+
+/**
+ * Framing policy, enforced (not report-only).
+ *
+ * This replaces `X-Frame-Options: DENY`, which used to sit in
+ * SECURITY_HEADERS and was the header actually refusing the ERP's
+ * iframe. X-Frame-Options cannot express "this one other origin" —
+ * its ALLOW-FROM form was never implemented by Chrome and is dropped
+ * from the spec — so allowing one origin means removing it and saying
+ * the same thing in CSP instead.
+ *
+ * It has to be its own ENFORCED header rather than an edit to the
+ * report-only policy above. Report-only does not block: with
+ * X-Frame-Options gone and frame-ancestors only in a report-only
+ * policy, ANY site could frame this app. Protection would be lost,
+ * silently, while looking tightened.
+ *
+ * Kept to the single directive so enforcing it cannot accidentally
+ * enforce the rest of the report-only policy, which is deliberately
+ * still being observed rather than applied.
+ */
+const FRAME_ANCESTORS = {
+  key: "Content-Security-Policy",
+  value: `frame-ancestors ${ERP_ORIGIN}`,
+};
 
 const nextConfig = {
   // Emit a self-contained server bundle (.next/standalone) so the
@@ -154,7 +197,7 @@ const nextConfig = {
         // assets (nosniff matters there) and /api/* (HSTS + referrer-
         // policy don't hurt).
         source: "/:path*",
-        headers: [...SECURITY_HEADERS],
+        headers: [...SECURITY_HEADERS, FRAME_ANCESTORS],
       },
     ];
   },
