@@ -173,6 +173,37 @@ BEGIN
     END IF;
   END;
 
+  -- ERP integration (049). The ledger is what stops a re-delivered
+  -- ERP event sending a customer the same WhatsApp message twice, and
+  -- erp_customer_id is how an ERP customer finds its CRM contact at
+  -- all — a silent no-op here would look like a working integration
+  -- that duplicates messages and creates a new contact each time.
+  IF to_regclass('public.erp_events') IS NULL THEN
+    RAISE EXCEPTION 'public.erp_events is missing (migration 049)';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'contacts'
+      AND column_name = 'erp_customer_id'
+  ) THEN
+    RAISE EXCEPTION 'contacts.erp_customer_id is missing (migration 049)';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'contacts'
+      AND column_name = 'marketing_opt_out'
+  ) THEN
+    RAISE EXCEPTION 'contacts.marketing_opt_out is missing (migration 049)';
+  END IF;
+  -- The partial unique index is the dedupe guarantee; without it two
+  -- events for one ERP customer can create two contacts.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public' AND indexname = 'idx_contacts_account_erp_customer'
+  ) THEN
+    RAISE EXCEPTION 'idx_contacts_account_erp_customer is missing (migration 049)';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;
