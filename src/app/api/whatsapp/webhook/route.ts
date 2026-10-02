@@ -12,6 +12,7 @@ import {
   type WaIdentity,
 } from '@/lib/whatsapp/wa-identity'
 import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe'
+import { applyConsentKeyword } from '@/lib/contacts/consent'
 import { reopenClosedConversation } from '@/lib/conversations/reopen'
 import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
@@ -904,6 +905,22 @@ async function processMessage(
   // Fire-and-forget: a slow or failing automation must not block the
   // webhook's 200 OK response to Meta.
   const inboundText = contentText ?? message.text?.body ?? ''
+
+  // Marketing consent. A bare "STOP" has to be honoured without
+  // anyone at the shop doing anything, and it has to be recorded
+  // before the ERP's next birthday / recall event arrives. Awaited
+  // (we're inside `after()`, which only waits on promises it can
+  // see) and never throws — see lib/contacts/consent.ts.
+  const consentChange = await applyConsentKeyword(
+    supabaseAdmin(),
+    accountId,
+    contactRecord.id,
+    inboundText,
+  )
+  if (consentChange) {
+    console.log('[consent]', consentChange, 'for contact', contactRecord.id)
+  }
+
   const automationTriggers: (
     | 'new_contact_created'
     | 'first_inbound_message'

@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+import { sessionCookieOptions } from '@/lib/supabase/cookie-options'
+
 // Next's client router appends `?_rsc=<hash>` to the React Server
 // Component fetches it makes behind a <Link>. That param belongs to
 // the data request, never to a page the browser shows.
@@ -39,8 +41,13 @@ export async function middleware(request: NextRequest) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({ request })
+          // Token refresh rewrites the session cookies on most
+          // requests. Without sessionCookieOptions() here, that
+          // rewrite would quietly downgrade them to SameSite=Lax and
+          // the ERP iframe would lose its session minutes after a
+          // successful sign-in.
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, sessionCookieOptions(options))
           )
         },
       },
