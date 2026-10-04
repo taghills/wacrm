@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { ssoRedirect } from './route';
+import { ssoRedirect } from './redirect';
 
 describe('ssoRedirect', () => {
   it('sends a relative Location, never an absolute URL', () => {

@@ -36,6 +36,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { verifyErpSsoToken, type SsoFailure } from '@/lib/erp/sso';
+import { ssoRedirect } from './redirect';
 import { resolveErpAccountId } from '@/lib/erp/process';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import { sessionCookieOptions } from '@/lib/supabase/cookie-options';
@@ -112,36 +113,6 @@ function refuse(
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-store',
     },
-  });
-}
-
-/**
- * The post-sign-in redirect, with a RELATIVE `Location`.
- *
- * `NextResponse.redirect()` needs an absolute URL, and the only
- * origin available here is `request.url` — which, behind a reverse
- * proxy, is the address the Node process is bound to rather than the
- * one the browser used. On the Hostinger deployment that is
- * `http://0.0.0.0:3000`, so a successful sign-in sent the browser to
- * `https://0.0.0.0:3000/dashboard`: the session was real, the
- * redirect was unreachable, and it looked like the whole site had
- * gone down.
- *
- * Reconstructing the public origin from `X-Forwarded-Host` would work
- * but means trusting a header the client can set, and getting it
- * wrong is an open redirect. A relative `Location` avoids the
- * question entirely: RFC 7231 allows it, every browser since IE
- * resolves it against the address bar, and the address bar is by
- * definition the origin the user actually reached us on. Nothing
- * here needs to know its own hostname.
- *
- * `next` is already validated site-relative by `sanitizeNext()`, so
- * this cannot emit a cross-origin Location.
- */
-export function ssoRedirect(next: string): NextResponse {
-  return new NextResponse(null, {
-    status: 302,
-    headers: { location: next, 'cache-control': 'no-store' },
   });
 }
 
