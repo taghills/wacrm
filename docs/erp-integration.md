@@ -92,6 +92,12 @@ This is why a per-event problem never becomes a non-2xx response: a
 record would re-send 99 good events. Per-event failures come back as
 `200 {"failed":["1042"]}` instead.
 
+The same ledger makes a slow bulk sync safe. The ERP delivers up to ten
+batches of 100 concurrently; if one request times out mid-batch, the
+events already recorded stay recorded, and the retry redoes only the
+rest. A timeout costs time, never a duplicate contact or a duplicate
+message.
+
 ## Stores
 
 `contact_stores` is the staff-isolation boundary (migration 043), and a
@@ -184,7 +190,21 @@ reach their chat by guessing the number in the query string.
    same values as `CRM_API_KEY` / `CRM_SHARED_SECRET` on the ERP.
 2. ERP → Settings → CRM Connection → **Test connection** (sends a
    signed `ping`).
-3. **Sync all customers now** — `customer.upsert` events, which send no
+3. **Turn the connection ON**, with every message type still disabled.
+4. **Sync all customers now** — `customer.upsert` events, which send no
    messages. Safe to run before any template exists.
-4. Turn the connection on, enable **one** message type, and test it on a
-   real number before enabling the rest.
+5. Enable **one** message type and test it on a real number before
+   enabling the rest.
+
+> **Steps 3 and 4 are in this order for a reason.** The ERP's sync
+> writes customers to an outbox, and a background job delivers it only
+> while the connection is ON. Syncing first queues everything with
+> nothing to send it: the ERP reports "625 customers added", the CRM
+> receives nothing, and no error appears on either side. The original
+> handover had these the other way round and that is exactly what
+> happened on the first run.
+>
+> Nothing is lost when it does — the queue drains as soon as the switch
+> goes on. `/api/erp/status` is how you tell the difference between
+> "queued" and "delivered": `events.counts` stays empty in the first
+> case.
