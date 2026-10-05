@@ -33,6 +33,7 @@
  */
 
 import { supabaseAdmin } from "./admin-client";
+import { linkContactToStoreFromBot } from "./set-store";
 import {
   engineSendInteractiveButtons,
   engineSendInteractiveList,
@@ -56,6 +57,7 @@ import {
   type SendMediaNodeConfig,
   type SendMessageNodeConfig,
   type SetTagNodeConfig,
+  type SetStoreNodeConfig,
   type StartNodeConfig,
   type KeywordTriggerConfig,
 } from "./types";
@@ -140,7 +142,8 @@ export function isAutoAdvancing(node_type: string): boolean {
     node_type === "send_message" ||
     node_type === "send_media" ||
     node_type === "condition" ||
-    node_type === "set_tag"
+    node_type === "set_tag" ||
+    node_type === "set_store"
   );
 }
 
@@ -793,6 +796,27 @@ async function advanceFromNodeKey(
         // strand the customer mid-flow.
         await logEvent(db, run.id, "error", node.node_key, {
           reason: "set_tag_failed",
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
+      currentKey = cfg.next_node_key;
+      continue;
+    }
+    if (node.node_type === "set_store") {
+      const cfg = node.config as unknown as SetStoreNodeConfig;
+      try {
+        await linkContactToStoreFromBot(db, {
+          accountId: run.account_id,
+          contactId: run.contact_id!,
+          storeId: cfg.store_id,
+        });
+      } catch (err) {
+        // Non-fatal, same contract as set_tag: log and advance. A
+        // failed link leaves the contact unassigned, which is the
+        // fail-closed default (owner/admin only) — annoying, but it
+        // must not strand the customer mid-conversation.
+        await logEvent(db, run.id, "error", node.node_key, {
+          reason: "set_store_failed",
           detail: err instanceof Error ? err.message : String(err),
         });
       }

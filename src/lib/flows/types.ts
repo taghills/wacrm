@@ -173,6 +173,31 @@ export interface SetTagNodeConfig {
   next_node_key: string;
 }
 
+/**
+ * Links the contact to a store, then auto-advances.
+ *
+ * This is the customer's own branch pick — "which shop are you
+ * contacting us about?" — and it writes `contact_stores` with
+ * `source = 'bot'` (migration 043).
+ *
+ * That table is the staff-isolation boundary, so this node decides
+ * who can see the conversation. Two consequences worth stating:
+ *
+ *   - The link is ADDITIVE. A customer who later orders from a second
+ *     branch belongs to both, and both see the chat. Nothing here
+ *     removes an existing link, and in particular a bot pick never
+ *     overrides a store the ERP assigned from a real sales order.
+ *
+ *   - `store_id` is chosen in the builder from the account's own
+ *     stores, so a flow cannot name a store in another account. The
+ *     engine re-checks it at run time anyway.
+ */
+export interface SetStoreNodeConfig {
+  /** Store UUID, picked in the builder from this account's stores. */
+  store_id: string;
+  next_node_key: string;
+}
+
 // Terminal nodes carry no config — they just stop the run.
 export type EndNodeConfig = Record<string, never>;
 
@@ -193,6 +218,7 @@ export type FlowNodeConfig =
   | { node_type: "collect_input"; config: CollectInputNodeConfig }
   | { node_type: "condition"; config: ConditionNodeConfig }
   | { node_type: "set_tag"; config: SetTagNodeConfig }
+  | { node_type: "set_store"; config: SetStoreNodeConfig }
   | { node_type: "handoff"; config: HandoffNodeConfig }
   | { node_type: "end"; config: EndNodeConfig };
 
