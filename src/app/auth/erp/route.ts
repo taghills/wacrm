@@ -151,19 +151,47 @@ export async function GET(request: NextRequest) {
   // Reading `profiles` first inverts it: no row in the ERP's own
   // account means refused, and nothing is created on the way to
   // finding that out.
-  const { data: profile, error: profileError } = await admin
+  // `ilike` rather than `eq`: email comparison is case-insensitive in
+  // practice, and `profiles.email` is a copy of `auth.users.email`
+  // made at signup — a row that predates any normalisation can carry
+  // the casing the person typed. The account filter above is what
+  // makes this safe to loosen; the email is narrowing within one
+  // tenant, not choosing one.
+  const { data: matches, error: profileError } = await admin
     .from('profiles')
-    .select('user_id')
-    .eq('account_id', resolved.accountId)
-    .eq('email', verified.email)
-    .maybeSingle();
+    .select('user_id, account_id')
+    .ilike('email', verified.email);
 
   if (profileError) {
     console.error('[auth/erp] profile lookup failed:', profileError.message);
     return refuse('session_failed', 500);
   }
+
+  const profile = (matches ?? []).find(
+    (row) => row.account_id === resolved.accountId,
+  );
+
   if (!profile) {
-    console.warn('[auth/erp] not a member of the ERP account:', verified.email);
+    // Deliberately detailed, because this log is the only diagnostic
+    // surface an operator has: the hosting panel shows runtime logs,
+    // and not everyone running this has database access.
+    //
+    // The two causes look identical from the outside and need
+    // opposite fixes. `matchedAccounts` is what tells them apart: an
+    // empty list means no CRM member has this email at all (invite
+    // them, or the ERP is sending the wrong address); a non-empty
+    // list that does not contain `erpAccountId` means the member
+    // exists but in a DIFFERENT account from the one the ERP writes
+    // to — the WhatsApp connection and the login belong to separate
+    // tenants, and no amount of inviting will fix it.
+    console.warn('[auth/erp] no member match', {
+      email: verified.email,
+      erpAccountId: resolved.accountId,
+      erpAccountFrom: process.env.ERP_ACCOUNT_ID?.trim()
+        ? 'ERP_ACCOUNT_ID'
+        : 'the account with WhatsApp connected',
+      matchedAccounts: (matches ?? []).map((row) => row.account_id),
+    });
     return refuse('no_crm_user', 403, verified.email);
   }
 
