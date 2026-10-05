@@ -142,6 +142,23 @@ describe('extractBranch', () => {
     expect(extractBranch(event('order.ready', orderData))).toBe('Shastri Nagar');
   });
 
+  it('reads a branch on a customer.upsert, not just on orders', () => {
+    // The bulk customer sync is how existing customers get assigned
+    // to a store without waiting for their next order. extractBranch
+    // reads `data.branch` regardless of event shape, so the ERP only
+    // has to include the field — nothing changes on this side.
+    expect(
+      extractBranch(
+        event('customer.upsert', {
+          erpCustomerId: 'c-1',
+          name: 'Asha Verma',
+          phone: '919999999999',
+          branch: 'Shastri Nagar',
+        }),
+      ),
+    ).toBe('Shastri Nagar');
+  });
+
   it('is null when absent or blank', () => {
     expect(extractBranch(event('order.ready', {}))).toBeNull();
     expect(extractBranch(event('order.ready', { branch: '  ' }))).toBeNull();
