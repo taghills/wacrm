@@ -28,6 +28,7 @@
 import { NextResponse } from 'next/server';
 
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
+import { maskEmail } from '@/lib/erp/mask-email';
 import { resolveErpAccountId } from '@/lib/erp/process';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 
@@ -72,11 +73,26 @@ async function accountInventory(
         .eq('account_id', account.id);
       counts[table] = count ?? 0;
     }
+    // Who is in it. Enough to recognise which login owns which
+    // account when someone has signed up twice and cannot tell the
+    // two apart — the case this was written for.
+    const { data: members } = await admin
+      .from('profiles')
+      .select('email, full_name, account_role, created_at')
+      .eq('account_id', account.id)
+      .order('created_at', { ascending: true });
+
     rows.push({
       id: account.id,
       name: account.name,
       createdAt: account.created_at,
       counts,
+      members: (members ?? []).map((m) => ({
+        email: maskEmail(m.email as string | null),
+        name: m.full_name,
+        role: m.account_role,
+        joinedAt: m.created_at,
+      })),
     });
   }
   return rows;
