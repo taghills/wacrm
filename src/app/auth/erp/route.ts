@@ -36,6 +36,8 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { verifyErpSsoToken, type SsoFailure } from '@/lib/erp/sso';
+import { ssoRedirect } from './redirect';
+import { resolveErpAccountId } from '@/lib/erp/process';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import { sessionCookieOptions } from '@/lib/supabase/cookie-options';
 
@@ -49,16 +51,40 @@ const FAILURE_COPY: Record<SsoFailure | 'no_crm_user' | 'session_failed', string
   role_not_allowed: 'Your ERP role does not have access to the WhatsApp CRM.',
   no_identity: 'Your ERP user has no email address, so the CRM cannot identify you.',
   no_crm_user:
-    'You do not have a WhatsApp CRM account yet. Ask the CRM owner to invite you from Settings → Team, using this same email address.',
+    'No WhatsApp CRM member matches your ERP account. Ask the CRM owner to invite you from Settings → Team, using the email address shown below.',
   session_failed: 'The CRM could not start your session. Please try again.',
 };
+
+/**
+ * The email is interpolated into the page, and it comes from a signed
+ * token rather than an anonymous request — but "signed" is not
+ * "trusted to be HTML-safe", and a stored XSS behind a 60-second HMAC
+ * is still a stored XSS.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 /**
  * A refusal page rather than a JSON body: this renders inside the
  * ERP's iframe, where `{"error":"Unauthorized"}` tells a shop
  * manager nothing about what to do next.
  */
-function refuse(reason: keyof typeof FAILURE_COPY, status: number): NextResponse {
+function refuse(
+  reason: keyof typeof FAILURE_COPY,
+  status: number,
+  /**
+   * The email we matched on, shown on the page. Not a secret, and
+   * without it "you have no access" is unactionable: when the ERP
+   * sends no email address we fall back to `<username>@erp.local`,
+   * and nobody can guess that is what to invite.
+   */
+  identity?: string,
+): NextResponse {
   const message = FAILURE_COPY[reason];
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -73,10 +99,12 @@ function refuse(reason: keyof typeof FAILURE_COPY, status: number): NextResponse
   .card { max-width:30rem; text-align:center; }
   h1 { font-size:1.1rem; margin:0 0 .5rem; }
   p { margin:0; opacity:.8; }
+  .id { margin-top:.75rem; font-family:ui-monospace,monospace; font-size:.85rem; opacity:.65; }
 </style></head>
 <body><div class="card">
   <h1>Can't open the WhatsApp CRM</h1>
   <p>${message}</p>
+  ${identity ? `<p class="id">${escapeHtml(identity)}</p>` : ''}
 </div></body></html>`;
 
   return new NextResponse(html, {
@@ -99,32 +127,56 @@ export async function GET(request: NextRequest) {
 
   const admin = supabaseAdmin();
 
-  // `generateLink` with type 'magiclink' does double duty: it refuses
-  // outright if no user has this email (so it is also our existence
-  // check) and, when one does, hands back a single-use token hash we
-  // can redeem into a session without ever sending an email.
+  // Which CRM account the ERP belongs to. Resolved the same way the
+  // event endpoint resolves it, so SSO and events can never disagree
+  // about which tenant the ERP is.
+  const resolved = await resolveErpAccountId(admin, process.env.ERP_ACCOUNT_ID);
+  if ('error' in resolved) {
+    console.error('[auth/erp] cannot resolve ERP account:', resolved.error);
+    return refuse('session_failed', 500);
+  }
+
+  // Membership of THAT account — the whole check, done before any
+  // user is touched.
+  //
+  // The obvious-looking version of this is wrong in a way worth
+  // spelling out. Asking "does a user with this email exist, and does
+  // it have an account?" passes for a user that does not belong here
+  // at all, because `handle_new_user` (migration 017) gives every new
+  // auth user a fresh personal account with role 'owner'. Supabase's
+  // `generateLink` creates the user when none exists, so that version
+  // let an unknown ERP username sign itself in, land in an empty CRM,
+  // and leave a junk account behind each time.
+  //
+  // Reading `profiles` first inverts it: no row in the ERP's own
+  // account means refused, and nothing is created on the way to
+  // finding that out.
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('user_id')
+    .eq('account_id', resolved.accountId)
+    .eq('email', verified.email)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error('[auth/erp] profile lookup failed:', profileError.message);
+    return refuse('session_failed', 500);
+  }
+  if (!profile) {
+    console.warn('[auth/erp] not a member of the ERP account:', verified.email);
+    return refuse('no_crm_user', 403, verified.email);
+  }
+
+  // Only now mint the session. `generateLink` hands back a single-use
+  // token hash we redeem below, without ever sending an email.
   const { data: link, error: linkError } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email: verified.email,
   });
 
-  if (linkError || !link?.user || !link.properties?.hashed_token) {
-    console.warn('[auth/erp] no CRM user for', verified.email, linkError?.message);
-    return refuse('no_crm_user', 403);
-  }
-
-  // Membership, not just existence. A user row can outlive the
-  // account it belonged to (removed from the team, left, account
-  // deleted) and must not get back in through the side door.
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('account_id')
-    .eq('user_id', link.user.id)
-    .maybeSingle();
-
-  if (!profile?.account_id) {
-    console.warn('[auth/erp] user has no account:', verified.email);
-    return refuse('no_crm_user', 403);
+  if (linkError || !link?.properties?.hashed_token) {
+    console.error('[auth/erp] could not mint a session:', linkError?.message);
+    return refuse('session_failed', 401);
   }
 
   // Build the redirect first and write the session cookies straight
@@ -132,8 +184,7 @@ export async function GET(request: NextRequest) {
   // the Set-Cookie headers and the 302 are provably the same
   // response — the failure mode otherwise is a redirect that lands
   // on /dashboard with no session and bounces to /login.
-  const response = NextResponse.redirect(new URL(verified.next, request.url));
-  response.headers.set('cache-control', 'no-store');
+  const response = ssoRedirect(verified.next);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
