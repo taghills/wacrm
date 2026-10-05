@@ -34,6 +34,54 @@ import { supabaseAdmin } from '@/lib/flows/admin-client';
 /** How many ledger rows to return. Newest first. */
 const RECENT_LIMIT = 50;
 
+/**
+ * Tables counted per account in the inventory below.
+ *
+ * Enough to answer "which of these accounts is the real CRM?"
+ * without reading a single row of anyone's data — every query is a
+ * HEAD request for a count.
+ */
+const INVENTORY_TABLES = [
+  'profiles',
+  'contacts',
+  'conversations',
+  'messages',
+  'stores',
+  'whatsapp_config',
+] as const;
+
+/** Guard against a pathological account list; two is the expected case. */
+const MAX_ACCOUNTS = 10;
+
+async function accountInventory(
+  admin: ReturnType<typeof supabaseAdmin>,
+): Promise<Array<Record<string, unknown>>> {
+  const { data: accounts } = await admin
+    .from('accounts')
+    .select('id, name, owner_user_id, created_at')
+    .order('created_at', { ascending: true })
+    .limit(MAX_ACCOUNTS);
+
+  const rows: Array<Record<string, unknown>> = [];
+  for (const account of accounts ?? []) {
+    const counts: Record<string, number> = {};
+    for (const table of INVENTORY_TABLES) {
+      const { count } = await admin
+        .from(table)
+        .select('id', { count: 'exact', head: true })
+        .eq('account_id', account.id);
+      counts[table] = count ?? 0;
+    }
+    rows.push({
+      id: account.id,
+      name: account.name,
+      createdAt: account.created_at,
+      counts,
+    });
+  }
+  return rows;
+}
+
 export async function GET() {
   try {
     const ctx = await requireRole('admin');
@@ -92,6 +140,14 @@ export async function GET() {
       contacts: {
         fromErp: erpContacts ?? 0,
       },
+      /**
+       * What is in each account. This exists because "the ERP wrote
+       * to a different account" is only half an answer — the other
+       * half is which account holds the real CRM, and that decides
+       * whether the fix is to point the ERP elsewhere or to move the
+       * WhatsApp connection. Counts only; no row contents.
+       */
+      accounts: await accountInventory(admin),
       events: {
         /** Counts by "<event type>:<outcome>" across the rows below. */
         counts,
