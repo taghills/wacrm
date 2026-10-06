@@ -38,6 +38,7 @@ import {
   type ErpCustomer,
   type ErpEvent,
 } from './events';
+import { shouldSendForBranch } from './send-gate';
 
 /** The tag every ERP-sourced contact carries, so they are filterable. */
 export const ERP_CONTACT_TAG = 'erp-customer';
@@ -57,6 +58,12 @@ export interface ErpProcessContext {
   currency: string;
   /** Where `thank_you_feedback` points. Null disables that one event. */
   reviewUrl: string | null;
+  /**
+   * Branches whose events may actually send a WhatsApp message,
+   * already normalised. Empty = no gate, every branch sends.
+   * See lib/erp/send-gate.ts.
+   */
+  allowedBranches: string[];
 }
 
 export type ErpEventStatus = 'done' | 'skipped' | 'failed';
@@ -462,6 +469,16 @@ export async function processErpEvent(
   // the ERP and deliberately sends nothing.
   if (event.type === 'customer.upsert') {
     return { status: 'done', detail: 'contact synced', contactId: contact.id };
+  }
+
+  // The send gate. Deliberately AFTER the contact and the store
+  // link: a held-back branch's customers still appear in the CRM,
+  // still belong to their store, and their staff still see them.
+  // Only the outgoing message is withheld, which is what makes a
+  // one-branch trial a trial rather than a partial rollout.
+  const gate = shouldSendForBranch(branch, ctx.allowedBranches);
+  if (!gate.send) {
+    return { status: 'skipped', detail: gate.reason, contactId: contact.id };
   }
 
   if (isMarketingEvent(event.type) && contact.marketingOptOut) {

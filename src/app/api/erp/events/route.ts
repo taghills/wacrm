@@ -29,6 +29,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import { verifyBearer, verifyEventSignature } from '@/lib/erp/signature';
 import { parseEventBatch, MAX_EVENTS_PER_BATCH } from '@/lib/erp/events';
+import { parseAllowedBranches } from '@/lib/erp/send-gate';
 import {
   processErpEvent,
   resolveErpAccountId,
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
     accountId,
     currency: (account?.default_currency as string) || 'INR',
     reviewUrl: process.env.REVIEW_LINK_URL?.trim() || null,
+    allowedBranches: parseAllowedBranches(process.env.ERP_SEND_ONLY_BRANCHES),
   };
 
   // ---- dedupe -------------------------------------------------

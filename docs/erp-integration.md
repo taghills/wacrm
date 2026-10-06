@@ -27,10 +27,11 @@ Generate each with `openssl rand -hex 32`. Both are server-side only.
 Until they are set, both endpoints refuse every request — the
 integration fails closed, it does not fall open.
 
-Two optional ones, documented in `.env.local.example`:
+Three optional ones, documented in `.env.local.example`:
 `ERP_ACCOUNT_ID` (only needed if more than one account in the
-deployment has WhatsApp connected) and `REVIEW_LINK_URL` (the review
-page `thank_you_feedback` points at).
+deployment has WhatsApp connected), `REVIEW_LINK_URL` (the review
+page `thank_you_feedback` points at), and `ERP_SEND_ONLY_BRANCHES`
+(the safety brake below).
 
 ### Templates
 
@@ -97,6 +98,44 @@ batches of 100 concurrently; if one request times out mid-batch, the
 events already recorded stay recorded, and the retry redoes only the
 rest. A timeout costs time, never a duplicate contact or a duplicate
 message.
+
+## The send gate — running a trial on one branch
+
+`ERP_SEND_ONLY_BRANCHES` limits which branches may actually send a
+WhatsApp message. Comma-separated names or store codes, matched with
+the same normalisation as store lookup, so `Demo Store`, `demo-store`
+and `DEMO STORE` are one branch.
+
+Unset, every branch sends — the behaviour every deployment has by
+default. Set, only the named branches do.
+
+Two reasons to use it:
+
+**A demo store in the ERP.** A test order carries a real phone number,
+and its branch name matches no CRM store. That mismatch is logged and
+deliberately non-fatal, because the alternative is a typo in a real
+branch name silencing a paying customer's message — so without this
+gate the demo order sends that number a real "your order is ready".
+Nothing in the data tells a demo store from a misspelt real one, so
+the operator has to say.
+
+**A staged rollout.** Run live on one shop for a week, then clear the
+setting. Held-back events still create the contact, still link it to
+its store, and still appear in that branch's inbox — only the outgoing
+message is withheld, which is what makes it a trial rather than a
+partial rollout.
+
+Events with no branch at all (`customer.birthday`) are held back while
+the gate is on. During a trial, "we could not tell which branch" is
+not evidence that it is the allowed one.
+
+Every held-back event is recorded in the ledger as `skipped` with a
+reason naming both the event's branch and the allowed list, so
+`/api/erp/status` shows exactly what the brake stopped. That endpoint
+also reports the live value under
+`configured.ERP_SEND_ONLY_BRANCHES` — as the list itself, not a
+boolean, because knowing the gate is *on* is useless without knowing
+which branches it admits.
 
 ## Stores
 

@@ -30,6 +30,7 @@ import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { maskEmail } from '@/lib/erp/mask-email';
 import { resolveErpAccountId } from '@/lib/erp/process';
+import { parseAllowedBranches } from '@/lib/erp/send-gate';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 
 /** How many ledger rows to return. Newest first. */
@@ -195,6 +196,15 @@ export async function GET() {
         ERP_SHARED_SECRET: Boolean(process.env.ERP_SHARED_SECRET),
         ERP_ACCOUNT_ID: Boolean(process.env.ERP_ACCOUNT_ID?.trim()),
         REVIEW_LINK_URL: Boolean(process.env.REVIEW_LINK_URL?.trim()),
+        /**
+         * Shown as the VALUE, not a boolean. The whole point of the
+         * gate is knowing exactly which branches are live, and
+         * "true" would not tell you that. An empty array means no
+         * gate: every branch sends.
+         */
+        ERP_SEND_ONLY_BRANCHES: parseAllowedBranches(
+          process.env.ERP_SEND_ONLY_BRANCHES,
+        ),
       },
       account: {
         /** The account the ERP writes to. */
