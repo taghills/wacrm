@@ -185,6 +185,17 @@ export function NodeConfigForm({
         />
       );
 
+    case "set_store":
+      return (
+        <SetStoreForm
+          cfg={cfg as SetStoreCfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+
     case "set_tag":
       return (
         <SetTagForm
@@ -861,6 +872,107 @@ function useUserTags(): UserTag[] {
     };
   }, []);
   return tags;
+}
+
+// ============================================================
+// set_store
+// ============================================================
+
+interface SetStoreCfg {
+  store_id?: string;
+  next_node_key?: string;
+}
+
+interface AccountStore {
+  id: string;
+  name: string;
+  code: string;
+}
+
+function SetStoreForm({
+  cfg,
+  allNodes,
+  currentKey,
+  onUpdateConfig,
+  t,
+}: {
+  cfg: SetStoreCfg;
+  allNodes: BuilderNode[];
+  currentKey: string;
+  onUpdateConfig: (patch: Record<string, unknown>) => void;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const stores = useAccountStores();
+
+  return (
+    <>
+      <div>
+        <label className="mb-1 block text-xs text-muted-foreground">
+          {t("storeLabel")}
+        </label>
+        {stores.length > 0 ? (
+          <Select
+            value={cfg.store_id ?? ""}
+            onValueChange={(v) => onUpdateConfig({ store_id: v })}
+          >
+            <SelectTrigger className="bg-muted">
+              <SelectValue placeholder={t("pickStore")} />
+            </SelectTrigger>
+            <SelectContent>
+              {stores.map((store) => (
+                <SelectItem key={store.id} value={store.id}>
+                  {store.name} ({store.code})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            value={cfg.store_id ?? ""}
+            onChange={(e) => onUpdateConfig({ store_id: e.target.value })}
+            placeholder={t("storeUuidPlaceholder")}
+            className="bg-muted font-mono text-xs"
+          />
+        )}
+        <p className="text-muted-foreground mt-1.5 text-xs">
+          {t("storeHelp")}
+        </p>
+      </div>
+      <NextNodeRow
+        value={cfg.next_node_key ?? ""}
+        allNodes={allNodes}
+        currentKey={currentKey}
+        onChange={(v) => onUpdateConfig({ next_node_key: v })}
+        label={t("thenAdvanceTo")}
+      />
+    </>
+  );
+}
+
+/**
+ * The account's active stores, for the picker. Mirrors useUserTags:
+ * on a deployment without the endpoint the form falls back to raw
+ * UUID entry rather than becoming unauthorable.
+ */
+function useAccountStores(): AccountStore[] {
+  const [stores, setStores] = useState<AccountStore[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/stores").catch(() => null);
+        if (!res || !res.ok) return;
+        const json = (await res.json()) as { stores?: AccountStore[] };
+        if (!cancelled) setStores(json.stores ?? []);
+      } catch {
+        // Stores endpoint absent — caller falls back to raw input.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return stores;
 }
 
 // ============================================================

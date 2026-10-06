@@ -38,6 +38,7 @@ export type FlowTemplateNodeType =
   | "collect_input"
   | "condition"
   | "set_tag"
+  | "set_store"
   | "handoff"
   | "end";
 
@@ -286,6 +287,99 @@ const LEAD_CAPTURE: FlowTemplate = {
 };
 
 // ============================================================
+// 4. Branch picker — which shop is this customer talking about?
+//
+// Built for a multi-store business (TAGHills): one WhatsApp number
+// serves every branch, but staff must only see their own branch's
+// customers. `contact_stores` is that boundary (migration 043), and
+// a brand-new enquiry starts with NO store, visible to owner and
+// admin only. This flow is how a walk-in enquiry tells us where it
+// belongs before anyone has placed an order.
+//
+// The ERP fills the same table from real sales orders, with
+// `source = 'erp'`. This is the softer `source = 'bot'` path, and it
+// never overrides an ERP link — see lib/flows/set-store.ts.
+//
+// `store_id` is left EMPTY on purpose. Store ids are per-account
+// UUIDs, so a static template cannot know them; the validator flags
+// each one until you pick a store in the builder, which also makes
+// the three nodes self-documenting. Change the button titles to your
+// own branch names at the same time.
+// ============================================================
+const BRANCH_PICKER: FlowTemplate = {
+  slug: "branch_picker",
+  name: "Branch picker",
+  description:
+    "Ask a new customer which store they're contacting, then assign them to that branch so only its staff see the chat. Pick your stores on the three 'Assign store' steps before activating.",
+  icon: "HelpCircle",
+  trigger_type: "first_inbound_message",
+  trigger_config: {},
+  entry_node_id: "start",
+  nodes: [
+    {
+      node_key: "start",
+      node_type: "start",
+      config: { next_node_key: "ask_branch" },
+    },
+    {
+      node_key: "ask_branch",
+      node_type: "send_buttons",
+      config: {
+        text: "Hi! 👋 Thanks for messaging TAGHills. Which store can we help you with?",
+        footer_text: "Tap a branch to continue.",
+        buttons: [
+          {
+            reply_id: "branch_1",
+            title: "Shashtri Nagar",
+            next_node_key: "assign_branch_1",
+          },
+          {
+            reply_id: "branch_2",
+            title: "Bahadurgarh",
+            next_node_key: "assign_branch_2",
+          },
+          {
+            reply_id: "branch_3",
+            title: "Rohini Sector-7",
+            next_node_key: "assign_branch_3",
+          },
+        ],
+      } as SendButtonsNodeConfig,
+    },
+    {
+      node_key: "assign_branch_1",
+      node_type: "set_store",
+      config: { store_id: "", next_node_key: "thanks" },
+    },
+    {
+      node_key: "assign_branch_2",
+      node_type: "set_store",
+      config: { store_id: "", next_node_key: "thanks" },
+    },
+    {
+      node_key: "assign_branch_3",
+      node_type: "set_store",
+      config: { store_id: "", next_node_key: "thanks" },
+    },
+    {
+      node_key: "thanks",
+      node_type: "send_message",
+      config: {
+        text: "Thank you! One of our team will reply here shortly. 😊",
+        next_node_key: "to_agent",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "to_agent",
+      node_type: "handoff",
+      config: {
+        note: "New enquiry — customer picked their branch from the welcome menu.",
+      } as HandoffNodeConfig,
+    },
+  ],
+};
+
+// ============================================================
 // Registry
 // ============================================================
 
@@ -293,6 +387,7 @@ const TEMPLATES: Record<string, FlowTemplate> = {
   welcome_menu: WELCOME_MENU,
   faq_bot: FAQ_BOT,
   lead_capture: LEAD_CAPTURE,
+  branch_picker: BRANCH_PICKER,
 };
 
 export function getFlowTemplate(slug: string): FlowTemplate | null {

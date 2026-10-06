@@ -1231,7 +1231,11 @@
         "fileUploaded": "Arquivo enviado.",
         "uploadFailed": "Falha no upload.",
         "fileTooLarge": "O arquivo tem {size} MB — o limite é 16 MB.",
-        "defaultOptionTitle": "Opção"
+        "defaultOptionTitle": "Opção",
+        "storeLabel": "Loja",
+        "pickStore": "Escolher uma loja",
+        "storeUuidPlaceholder": "UUID da loja",
+        "storeHelp": "Apenas a equipe desta loja (mais proprietários e administradores) verá este cliente. Adicionar uma loja nunca remove outra à qual o cliente já pertence."
       },
       "categories": {
         "messaging": "Mensagens",
@@ -1270,6 +1274,10 @@
         "set_tag": {
           "label": "Marcar contato",
           "blurb": "Adiciona ou remove uma tag do contato"
+        },
+        "set_store": {
+          "label": "Atribuir loja",
+          "blurb": "Liga o contato a uma loja para que essa filial veja a conversa"
         },
         "handoff": {
           "label": "Transferir para agente",
@@ -1310,7 +1318,9 @@
       "modeAdd": "Adicionar",
       "modeRemove": "Remover",
       "tagPicked": "{mode} tag {tag}…",
-      "tagNone": "{mode} tag (nenhuma escolhida)"
+      "tagNone": "{mode} tag (nenhuma escolhida)",
+      "storePicked": "Atribuir loja {store}…",
+      "storeNone": "Atribuir loja (nenhuma escolhida)"
     },
     "header": {
       "backToFlows": "Voltar aos fluxos",

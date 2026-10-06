@@ -204,6 +204,17 @@ BEGIN
     RAISE EXCEPTION 'idx_contacts_account_erp_customer is missing (migration 049)';
   END IF;
 
+  -- The set_store flow node (050). A silent no-op here looks like a
+  -- builder that offers the node and a database that refuses to save
+  -- any flow containing it.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'flow_nodes_node_type_check'
+      AND pg_get_constraintdef(oid) LIKE '%set_store%'
+  ) THEN
+    RAISE EXCEPTION 'flow_nodes.node_type does not allow set_store (migration 050)';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;

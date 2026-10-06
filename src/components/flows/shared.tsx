@@ -25,6 +25,7 @@ import {
   MessageCircle,
   Paperclip,
   PlayCircle,
+  Store,
   Tag,
   UserPlus,
   Workflow,
@@ -49,6 +50,7 @@ export type NodeType =
   | 'collect_input'
   | 'condition'
   | 'set_tag'
+  | 'set_store'
   | 'handoff'
   | 'end';
 
@@ -145,6 +147,12 @@ export const NODE_META: Record<
     color: 'text-pink-400',
     category: 'logic',
   },
+  set_store: {
+    slugSeed: 'Assign store',
+    icon: Store,
+    color: 'text-cyan-400',
+    category: 'logic',
+  },
   handoff: {
     slugSeed: 'Handoff to agent',
     icon: UserPlus,
@@ -195,6 +203,7 @@ const NODE_HUE: Record<NodeType, { l: number; c: number; h: number }> = {
   collect_input: { l: 0.65, c: 0.1, h: 185 }, // teal — capture
   condition: { l: 0.72, c: 0.15, h: 65 }, // amber — a fork in the road
   set_tag: { l: 0.65, c: 0.15, h: 350 }, // pink
+  set_store: { l: 0.66, c: 0.13, h: 200 }, // cyan — which branch owns them
   handoff: { l: 0.65, c: 0.17, h: 16 }, // rose — hands off
   end: { l: 0.55, c: 0.01, h: 260 }, // neutral grey — terminal
 };
@@ -399,6 +408,15 @@ export function summarizeNode(
           ? ` "${truncate(value, 20)}"`
           : '';
       return subject === 'tag' ? subjectStr : `${subjectStr} ${op}${valStr}`;
+    }
+    case 'set_store': {
+      // Same constraint as set_tag below: the store's NAME needs an
+      // async lookup this summary cannot do, so show a short id
+      // prefix — enough to tell two assign-store nodes apart.
+      const storeId = typeof cfg.store_id === 'string' ? cfg.store_id : '';
+      return storeId
+        ? t ? t('storePicked', { store: storeId.slice(0, 8) }) : `Assign store ${storeId.slice(0, 8)}…`
+        : t ? t('storeNone') : 'Assign store (none picked)';
     }
     case 'set_tag': {
       const mode = cfg.mode === 'remove' ? (t ? t('modeRemove') : 'Remove') : (t ? t('modeAdd') : 'Add');
