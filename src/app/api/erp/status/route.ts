@@ -36,6 +36,62 @@ import { supabaseAdmin } from '@/lib/flows/admin-client';
 const RECENT_LIMIT = 50;
 
 /**
+ * How many contacts are linked to each store, and where those links
+ * came from.
+ *
+ * This is the question the whole store-isolation feature turns on —
+ * an unlinked contact is visible to owner and admin only, so if these
+ * counts are zero then every branch's staff see an empty CRM. It
+ * belongs here because the alternative is reading it off a card in
+ * the contact UI, which conflates "no links exist" with "the card
+ * failed to load", and those need different fixes.
+ *
+ * `source` is the useful split: 'erp' means a real sales order said
+ * so, 'bot' a customer's own branch pick, 'manual' an admin by hand.
+ */
+async function storeLinkSummary(
+  admin: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+): Promise<Record<string, unknown>> {
+  const { data: stores } = await admin
+    .from("stores")
+    .select("id, name, code, active")
+    .eq("account_id", accountId);
+
+  const { count: total } = await admin
+    .from("contact_stores")
+    .select("contact_id", { count: "exact", head: true })
+    .eq("account_id", accountId);
+
+  const bySource: Record<string, number> = {};
+  for (const source of ["erp", "bot", "manual"]) {
+    const { count } = await admin
+      .from("contact_stores")
+      .select("contact_id", { count: "exact", head: true })
+      .eq("account_id", accountId)
+      .eq("source", source);
+    bySource[source] = count ?? 0;
+  }
+
+  const perStore: Array<Record<string, unknown>> = [];
+  for (const store of stores ?? []) {
+    const { count } = await admin
+      .from("contact_stores")
+      .select("contact_id", { count: "exact", head: true })
+      .eq("account_id", accountId)
+      .eq("store_id", store.id);
+    perStore.push({
+      name: store.name,
+      code: store.code,
+      active: store.active,
+      contacts: count ?? 0,
+    });
+  }
+
+  return { total: total ?? 0, bySource, perStore };
+}
+
+/**
  * Tables counted per account in the inventory below.
  *
  * Enough to answer "which of these accounts is the real CRM?"
@@ -156,6 +212,12 @@ export async function GET() {
       contacts: {
         fromErp: erpContacts ?? 0,
       },
+      /**
+       * Zero here means nobody is assigned to a branch, so every
+       * store's staff see nothing — the single most important number
+       * on this page once contacts are arriving.
+       */
+      storeLinks: await storeLinkSummary(admin, ledgerAccountId),
       /**
        * What is in each account. This exists because "the ERP wrote
        * to a different account" is only half an answer — the other
