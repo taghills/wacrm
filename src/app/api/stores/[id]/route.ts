@@ -24,6 +24,7 @@ import {
 
 const NAME_MAX = 80;
 const CODE_MAX = 16;
+const PHONE_MAX = 32;
 
 export async function PATCH(
   request: Request,
@@ -42,6 +43,7 @@ export async function PATCH(
     const body = (await request.json().catch(() => null)) as {
       name?: unknown;
       code?: unknown;
+      phone?: unknown;
       active?: unknown;
     } | null;
 
@@ -69,6 +71,19 @@ export async function PATCH(
       patch.code = code;
     }
 
+    if (body?.phone !== undefined) {
+      // Clearing it is a legitimate edit, so an empty string is
+      // accepted and stored as NULL rather than rejected.
+      const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
+      if (phone.length > PHONE_MAX) {
+        return NextResponse.json(
+          { error: `'phone' must be at most ${PHONE_MAX} characters` },
+          { status: 400 },
+        );
+      }
+      patch.phone = phone || null;
+    }
+
     if (body?.active !== undefined) {
       if (typeof body.active !== 'boolean') {
         return NextResponse.json(
@@ -93,7 +108,7 @@ export async function PATCH(
       .from('stores')
       .update(patch)
       .eq('id', id)
-      .select('id, name, code, active, created_at')
+      .select('id, name, code, phone, active, created_at')
       .maybeSingle();
 
     if (error) {

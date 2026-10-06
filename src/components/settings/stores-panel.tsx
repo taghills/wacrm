@@ -53,6 +53,7 @@ export function StoresPanel() {
   const [editing, setEditing] = useState<Store | null>(null);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [storeToDelete, setStoreToDelete] = useState<Store | null>(null);
@@ -81,6 +82,7 @@ export function StoresPanel() {
     setEditing(null);
     setName('');
     setCode('');
+    setPhone('');
     setFormOpen(true);
   }
 
@@ -88,6 +90,7 @@ export function StoresPanel() {
     setEditing(store);
     setName(store.name);
     setCode(store.code);
+    setPhone(store.phone ?? '');
     setFormOpen(true);
   }
 
@@ -103,7 +106,11 @@ export function StoresPanel() {
         {
           method: editing ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), code: code.trim() }),
+          body: JSON.stringify({
+            name: name.trim(),
+            code: code.trim(),
+            phone: phone.trim(),
+          }),
         },
       );
       const json = (await res.json().catch(() => ({}))) as { error?: string };
@@ -280,6 +287,18 @@ export function StoresPanel() {
                 className="font-mono"
               />
               <p className="text-xs text-muted-foreground">{t('codeHelp')}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="store-phone">{t('phoneLabel')}</Label>
+              <Input
+                id="store-phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder={t('phonePlaceholder')}
+                maxLength={32}
+              />
+              <p className="text-xs text-muted-foreground">{t('phoneHelp')}</p>
             </div>
           </div>
           <DialogFooter>

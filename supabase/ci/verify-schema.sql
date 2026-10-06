@@ -215,6 +215,17 @@ BEGIN
     RAISE EXCEPTION 'flow_nodes.node_type does not allow set_store (migration 050)';
   END IF;
 
+  -- Store contact numbers (051). Customer messages interpolate this,
+  -- and a missing column would surface as every branch falling back to
+  -- the default number rather than as an error.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'stores'
+      AND column_name = 'phone'
+  ) THEN
+    RAISE EXCEPTION 'stores.phone is missing (migration 051)';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;
