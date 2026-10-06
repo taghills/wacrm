@@ -28,6 +28,7 @@ import {
 
 const NAME_MAX = 80;
 const CODE_MAX = 16;
+const PHONE_MAX = 32;
 
 export async function GET() {
   try {
@@ -35,7 +36,7 @@ export async function GET() {
 
     const { data, error } = await ctx.supabase
       .from('stores')
-      .select('id, name, code, active, created_at')
+      .select('id, name, code, phone, active, created_at')
       .eq('account_id', ctx.accountId)
       .order('name', { ascending: true });
 
@@ -66,6 +67,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as {
       name?: unknown;
       code?: unknown;
+      phone?: unknown;
     } | null;
 
     const name = typeof body?.name === 'string' ? body.name.trim() : '';
@@ -84,10 +86,27 @@ export async function POST(request: Request) {
       );
     }
 
+    // Free-form: this is printed for a human to dial, never parsed
+    // or matched, so the only check worth making is the length.
+    // Blank normalises to NULL rather than an empty string, so
+    // "unset" has one representation for the send path to test.
+    const phoneRaw = typeof body?.phone === 'string' ? body.phone.trim() : '';
+    if (phoneRaw.length > PHONE_MAX) {
+      return NextResponse.json(
+        { error: `'phone' must be at most ${PHONE_MAX} characters` },
+        { status: 400 },
+      );
+    }
+
     const { data, error } = await ctx.supabase
       .from('stores')
-      .insert({ account_id: ctx.accountId, name, code })
-      .select('id, name, code, active, created_at')
+      .insert({
+        account_id: ctx.accountId,
+        name,
+        code,
+        phone: phoneRaw || null,
+      })
+      .select('id, name, code, phone, active, created_at')
       .single();
 
     if (error) {

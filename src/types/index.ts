@@ -102,6 +102,13 @@ export interface Store {
   name: string;
   /** Short human code, unique per account, used by the ERP sync. */
   code: string;
+  /**
+   * Public contact number for this branch, shown to customers in
+   * WhatsApp messages. Free-form as a human would dial it; null when
+   * not set, which the send path treats as "fall back", never as an
+   * empty value to interpolate.
+   */
+  phone: string | null;
   active: boolean;
   created_at: string;
 }
