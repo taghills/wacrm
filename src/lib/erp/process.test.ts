@@ -21,7 +21,12 @@ import {
 describe('storeLinkNote', () => {
   it('names the store a contact was filed to', () => {
     expect(
-      storeLinkNote({ linked: true, storeName: 'Demo', storeCode: 'DEMO' }),
+      storeLinkNote({
+        linked: true,
+        storeName: 'Demo',
+        storeCode: 'DEMO',
+        storePhone: '+91 76786 88524',
+      }),
     ).toBe('filed to Demo');
   });
 

@@ -34,9 +34,11 @@ import {
   extractCustomer,
   isKnownEventType,
   isMarketingEvent,
+  requiresBranchPhone,
   templatePlanFor,
   type ErpCustomer,
   type ErpEvent,
+  type TemplatePlan,
 } from './events';
 import { shouldSendForBranch } from './send-gate';
 
@@ -85,7 +87,13 @@ export const UNMATCHED_BRANCH = 'branch matched no store: ';
 
 /** What `linkContactToBranch` did, and why, in words fit for the ledger. */
 export type StoreLinkResult =
-  | { linked: true; storeName: string; storeCode: string }
+  | {
+      linked: true;
+      storeName: string;
+      storeCode: string;
+      /** The store's own contact number, or null if nobody set one. */
+      storePhone: string | null;
+    }
   | { linked: false; reason: string };
 
 // ------------------------------------------------------------
@@ -417,7 +425,7 @@ export async function linkContactToBranch(
   const { db, accountId } = ctx;
   const { data: stores } = await db
     .from('stores')
-    .select('id, name, code')
+    .select('id, name, code, phone')
     .eq('account_id', accountId)
     .eq('active', true);
   if (!stores || stores.length === 0) {
@@ -451,7 +459,14 @@ export async function linkContactToBranch(
       reason: `store link failed for branch ${branch}: ${error.message}`,
     };
   }
-  return { linked: true, storeName: String(match.name), storeCode: String(match.code) };
+  return {
+    linked: true,
+    storeName: String(match.name),
+    storeCode: String(match.code),
+    storePhone: typeof match.phone === 'string' && match.phone.trim()
+      ? match.phone.trim()
+      : null,
+  };
 }
 
 /** Lowercase, strip everything that is not a letter or a digit. */
@@ -528,15 +543,35 @@ export async function processErpEvent(
     };
   }
 
+  // Every approved template closes by naming the branch's own phone
+  // number, so a store with no number cannot send. Checked here, by
+  // name, because "no template mapped" would send the operator
+  // hunting through template settings for a missing field in
+  // Settings -> Stores.
+  const branchPhone = link?.linked ? link.storePhone : null;
+  if (requiresBranchPhone(event.type) && !branchPhone) {
+    return {
+      status: 'skipped',
+      detail: withNote(
+        link?.linked
+          ? `store ${link.storeName} has no contact number: set it in Settings -> Stores`
+          : 'cannot tell which store is sending, so there is no contact number for the message',
+        note,
+      ),
+      contactId: contact.id,
+    };
+  }
+
   const plan = templatePlanFor(event, {
     currency: ctx.currency,
     reviewUrl: ctx.reviewUrl,
+    branchPhone,
   });
   if (!plan) {
     return {
       status: 'skipped',
       detail: withNote(
-        event.type === 'order.delivered'
+        event.type === 'order.review'
           ? 'REVIEW_LINK_URL is not set, so there is no review link to send'
           : 'no template mapped for this event',
         note,
@@ -557,6 +592,11 @@ export async function processErpEvent(
     messageType: 'template',
     templateName: plan.templateName,
     templateParams: plan.params,
+    // The structured form is what carries a DOCUMENT header and a URL
+    // button through to Meta; `templateParams` alone reaches the body
+    // only. Passed only when there is something to put in it, so the
+    // plain templates keep the simpler, well-tested path.
+    templateMessageParams: buildSendParams(plan, ctx.reviewUrl),
   });
 
   return {
@@ -564,6 +604,29 @@ export async function processErpEvent(
     detail: withNote(`sent ${plan.templateName}`, note),
     contactId: contact.id,
   };
+}
+
+/**
+ * The structured send params for a plan, or undefined when the plan
+ * needs none.
+ *
+ * `review_request` puts the review link on its URL button rather than
+ * in the body, so the link is a button param, not a body param. Index
+ * 0 is that template's only button.
+ */
+export function buildSendParams(
+  plan: TemplatePlan,
+  reviewUrl?: string | null,
+): Record<string, unknown> | undefined {
+  const params: Record<string, unknown> = {};
+  if (plan.documentUrl) {
+    params.headerMediaUrl = plan.documentUrl;
+    if (plan.documentFilename) params.headerFilename = plan.documentFilename;
+  }
+  if (plan.templateName === 'review_request' && reviewUrl?.trim()) {
+    params.buttonParams = { 0: reviewUrl.trim() };
+  }
+  return Object.keys(params).length > 0 ? params : undefined;
 }
 
 /**

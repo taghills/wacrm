@@ -46,6 +46,13 @@ export const KNOWN_EVENT_TYPES = [
   'order.created',
   'order.ready',
   'order.delivered',
+  /**
+   * The review request, sent some days AFTER delivery. It is a
+   * separate event rather than a delay on `order.delivered` because
+   * the CRM has no scheduler of its own for ERP events: the ERP
+   * decides when enough days have passed and emits this then.
+   */
+  'order.review',
   'payment.received',
   'customer.birthday',
   'customer.recall',
@@ -72,6 +79,12 @@ export function isKnownEventType(type: string): type is ErpEventType {
 export const MARKETING_EVENT_TYPES: readonly string[] = [
   'customer.birthday',
   'customer.recall',
+  /**
+   * A review request is not about completing the customer's order, so
+   * it is marketing both in Meta's eyes and in ours: STOP silences
+   * it, and it is submitted as MARKETING to avoid a rejection.
+   */
+  'order.review',
 ];
 
 export function isMarketingEvent(type: string): boolean {
@@ -237,18 +250,70 @@ export interface TemplatePlan {
   templateName: string;
   /** Positional body params, already sanitised: {{1}}, {{2}}, … */
   params: string[];
+  /**
+   * URL for a DOCUMENT header, when this plan chose the `_doc`
+   * variant. Meta fixes a template's shape at approval: a template
+   * approved with a document header must carry one on EVERY send, and
+   * one approved without can never gain one. So "attach the PDF when
+   * the ERP gives us a link" is two approved templates, not one, and
+   * this field is what tells them apart.
+   */
+  documentUrl?: string;
+  /** Filename the customer sees on the attachment. */
+  documentFilename?: string;
 }
 
 export interface TemplatePlanOptions {
   /** Account currency for money variables. */
   currency?: string;
   /**
-   * Where `thank_you_feedback` sends the customer to leave a review.
-   * Unset means that one event type cannot be delivered; the caller
-   * skips it with a reason rather than sending a template with an
-   * empty variable.
+   * Where `review_request`'s button sends the customer. Unset means
+   * that one event type cannot be delivered; the caller skips it with
+   * a reason rather than sending a template with an empty variable.
    */
   reviewUrl?: string | null;
+  /**
+   * The serving branch's own contact number, as the customer should
+   * dial it. Every approved template closes by naming it, so a plan
+   * cannot be built without one — see `requiresBranchPhone`. The
+   * caller resolves it from the store matched to the event's branch;
+   * it is NOT formatted or validated here, because a shop's number is
+   * printed for a human to read, not parsed.
+   */
+  branchPhone?: string | null;
+}
+
+/**
+ * Event types whose approved template closes with the branch's phone
+ * number, and therefore cannot be sent until that store has one.
+ *
+ * Every customer-facing template does. The constant exists so the
+ * caller can say WHICH store needs a number rather than failing with
+ * a bare "no template mapped", and so an empty parameter — which Meta
+ * rejects outright — can never reach a send.
+ */
+export function requiresBranchPhone(type: string): boolean {
+  return type !== 'ping' && type !== 'customer.upsert';
+}
+
+/**
+ * The PDF the ERP attached to this event, if any.
+ *
+ * `receiptPdf` rides on `order.created`, `invoicePdf` on
+ * `order.delivered`. Both are optional: the ERP did not have them
+ * when this integration was first built, and an order whose PDF is
+ * still rendering must not hold up its confirmation message.
+ */
+export function extractDocumentUrl(event: ErpEvent): string | null {
+  const data = event.data;
+  const raw = data.invoicePdf ?? data.receiptPdf;
+  if (typeof raw !== 'string') return null;
+  const url = raw.trim();
+  // Only https: a document header is fetched by Meta's servers, and
+  // an http link fails there rather than here, which is a far worse
+  // place to find out.
+  if (!url.toLowerCase().startsWith('https://')) return null;
+  return url;
 }
 
 /**
@@ -275,58 +340,106 @@ export function templatePlanFor(
   const data = event.data;
   const billNo = sanitizeParam(data.billNo);
   const branch = sanitizeParam(extractBranch(event) ?? '');
+  const phone = sanitizeParam(options.branchPhone ?? '');
+
+  // Fail closed rather than send a template with a blank variable:
+  // Meta rejects an empty parameter, and a message reading "call us
+  // on " is worse than no message at all. The caller turns this into
+  // a reason naming the store that needs a number.
+  if (requiresBranchPhone(event.type) && !phone) return null;
+
+  const pdf = extractDocumentUrl(event);
 
   switch (event.type) {
-    case 'order.created':
-      return {
-        templateName: 'order_confirmation',
-        params: [
-          name,
-          billNo,
-          formatMoney(data.grandTotal, currency),
-          formatMoney(data.balance, currency),
-          sanitizeParam(formatDate(data.deliveryDate)),
-        ],
-      };
+    case 'order.created': {
+      const params = [
+        name,
+        branch,
+        billNo,
+        formatMoney(data.grandTotal, currency),
+        formatMoney(data.paid, currency),
+        formatMoney(data.balance, currency),
+        sanitizeParam(formatDate(data.deliveryDate)),
+        phone,
+      ];
+      // Two approved templates, identical wording, differing only in
+      // the document header. See TemplatePlan.documentUrl.
+      return pdf
+        ? {
+            templateName: 'order_confirmation_doc',
+            params,
+            documentUrl: pdf,
+            documentFilename: receiptFilename(data.billNo),
+          }
+        : { templateName: 'order_confirmation', params };
+    }
 
     case 'order.ready':
       return {
         templateName: 'order_ready',
-        params: [name, billNo, branch, formatMoney(data.balance, currency)],
+        params: [
+          name,
+          billNo,
+          branch,
+          formatMoney(data.balance, currency),
+          phone,
+        ],
       };
 
     case 'order.delivered': {
+      const params = [name, billNo, branch, phone];
+      return pdf
+        ? {
+            templateName: 'order_delivered_invoice',
+            params,
+            documentUrl: pdf,
+            documentFilename: invoiceFilename(data.billNo),
+          }
+        : { templateName: 'order_delivered', params };
+    }
+
+    case 'order.review': {
       const reviewUrl = options.reviewUrl?.trim();
       if (!reviewUrl) return null;
+      // The review link rides on the template's URL BUTTON, not the
+      // body, so it is not a body param. The caller passes it through
+      // buttonParams.
       return {
-        templateName: 'thank_you_feedback',
-        params: [name, sanitizeParam(reviewUrl)],
+        templateName: 'review_request',
+        params: [name, branch, phone],
       };
     }
-
-    case 'payment.received': {
-      const payment =
-        data.payment && typeof data.payment === 'object' && !Array.isArray(data.payment)
-          ? (data.payment as Record<string, unknown>)
-          : {};
-      return {
-        templateName: 'payment_receipt',
-        params: [
-          name,
-          formatMoney(payment.amount, currency),
-          billNo,
-          formatMoney(data.balance, currency),
-        ],
-      };
-    }
-
-    case 'customer.birthday':
-      return { templateName: 'birthday_wish', params: [name] };
 
     case 'customer.recall':
-      return { templateName: 'eye_test_recall', params: [name, branch] };
+      return {
+        templateName: 'eye_test_recall',
+        params: [name, branch, phone],
+      };
+
+    /**
+     * Deliberately unmapped. `payment_receipt` and `birthday_wish`
+     * were never written or submitted for approval, and a send
+     * naming a template Meta has not approved fails at the API. The
+     * caller records "no template mapped", which is the honest
+     * reason: these two are off until someone writes them.
+     */
+    case 'payment.received':
+    case 'customer.birthday':
+      return null;
 
     default:
       return null;
   }
+}
+
+/** `Receipt-TH-0001.pdf`, or a generic name when there is no bill no. */
+function receiptFilename(billNo: unknown): string {
+  const no = typeof billNo === 'string' ? billNo.trim() : '';
+  return no ? `Receipt-${no}.pdf` : 'Receipt.pdf';
+}
+
+/** `Invoice-TH-0001.pdf`, or a generic name when there is no bill no. */
+function invoiceFilename(billNo: unknown): string {
+  const no = typeof billNo === 'string' ? billNo.trim() : '';
+  return no ? `Invoice-${no}.pdf` : 'Invoice.pdf';
 }

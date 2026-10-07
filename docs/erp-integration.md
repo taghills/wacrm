@@ -41,17 +41,53 @@ event will deliver:
 
 | Event | Template | Body variables, in order |
 |---|---|---|
-| `order.created` | `order_confirmation` | name, bill no, total, balance, delivery date |
-| `order.ready` | `order_ready` | name, bill no, branch, balance |
-| `order.delivered` | `thank_you_feedback` | name, review link |
-| `payment.received` | `payment_receipt` | name, amount paid, bill no, balance |
-| `customer.birthday` | `birthday_wish` | name |
-| `customer.recall` | `eye_test_recall` | name, branch |
+| `order.created` | `order_confirmation` | name, branch, bill no, total, paid, balance, delivery date, branch phone |
+| `order.created` + PDF | `order_confirmation_doc` | the same eight, plus a receipt PDF header |
+| `order.ready` | `order_ready` | name, bill no, branch, balance, branch phone |
+| `order.delivered` | `order_delivered` | name, bill no, branch, branch phone |
+| `order.delivered` + PDF | `order_delivered_invoice` | the same four, plus an invoice PDF header |
+| `order.review` | `review_request` | name, branch, branch phone (review link on the button) |
+| `customer.recall` | `eye_test_recall` | name, branch, branch phone |
 
-`customer.upsert` and `ping` send nothing. The mapping lives in
-`src/lib/erp/events.ts` — that table is the editorial surface, and
-changing a template name or a variable order there is how you change
-what customers receive.
+`customer.upsert` and `ping` send nothing. `payment.received` and
+`customer.birthday` are **deliberately unmapped**: no template was ever
+written or approved for them, and naming a template Meta does not have
+fails at the API. They record "no template mapped" until someone writes
+them.
+
+The mapping lives in `src/lib/erp/events.ts` — that table is the
+editorial surface, and changing a template name or a variable order
+there is how you change what customers receive.
+
+#### Why two templates per PDF
+
+Meta fixes a template's shape at approval. A template approved **with**
+a document header must carry a document on every send; one approved
+**without** can never gain one. So "attach the receipt when the ERP
+gives us a link" is two approved templates with identical wording, and
+the plan picks between them per order. The ERP supplies the link as
+`receiptPdf` on `order.created` and `invoicePdf` on `order.delivered`;
+both are optional, and a non-`https` link is ignored rather than sent,
+because Meta's servers fetch the file and an `http` failure surfaces
+there instead of here.
+
+#### Why the review request is its own event
+
+The CRM has no scheduler for ERP events, so a "review after N days"
+message cannot be a delayed `order.delivered`. The ERP counts the days
+and emits `order.review` when they have passed. It is classed as
+marketing: **STOP** silences it, and it is submitted to Meta as
+MARKETING because a review request is not about completing the
+customer's order.
+
+#### Every template names the branch's phone
+
+All six close by naming the serving branch's own contact number, taken
+from `stores.phone` for the store matched to the event's branch. A
+store with no number **cannot send**: the event is skipped with
+`store <name> has no contact number`, because Meta rejects an empty
+parameter and a message reading "call us on " is worse than no message.
+Fill it in at Settings → Stores.
 
 ## Security
 
