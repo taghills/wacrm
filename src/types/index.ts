@@ -109,6 +109,12 @@ export interface Store {
    * empty value to interpolate.
    */
   phone: string | null;
+  /**
+   * This branch's own Google review link. Google attaches reviews to
+   * a location, so each shop has its own listing. NULL falls back to
+   * the account-wide link in Settings -> Automatic messages.
+   */
+  review_url: string | null;
   active: boolean;
   created_at: string;
 }

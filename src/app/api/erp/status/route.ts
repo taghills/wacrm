@@ -162,7 +162,7 @@ async function storeLinkSummary(
 ): Promise<Record<string, unknown>> {
   const { data: stores } = await admin
     .from("stores")
-    .select("id, name, code, active")
+    .select("id, name, code, active, phone, review_url")
     .eq("account_id", accountId);
 
   const { count: total } = await admin
@@ -192,6 +192,18 @@ async function storeLinkSummary(
       code: store.code,
       active: store.active,
       contacts: count ?? 0,
+      /**
+       * Both are needed before this branch can send. A store with no
+       * number sends nothing at all; one with no review link falls
+       * back to the account-wide one, which on a multi-branch
+       * business puts the review on the wrong listing.
+       */
+      hasPhone: Boolean(
+        typeof store.phone === 'string' && store.phone.trim(),
+      ),
+      hasReviewLink: Boolean(
+        typeof store.review_url === 'string' && store.review_url.trim(),
+      ),
     });
   }
 

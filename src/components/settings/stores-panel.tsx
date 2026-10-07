@@ -54,6 +54,7 @@ export function StoresPanel() {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [phone, setPhone] = useState('');
+  const [reviewUrl, setReviewUrl] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [storeToDelete, setStoreToDelete] = useState<Store | null>(null);
@@ -83,6 +84,7 @@ export function StoresPanel() {
     setName('');
     setCode('');
     setPhone('');
+    setReviewUrl('');
     setFormOpen(true);
   }
 
@@ -91,12 +93,17 @@ export function StoresPanel() {
     setName(store.name);
     setCode(store.code);
     setPhone(store.phone ?? '');
+    setReviewUrl(store.review_url ?? '');
     setFormOpen(true);
   }
 
   async function handleSave() {
     if (!name.trim() || !code.trim()) {
       toast.error(t('nameAndCodeRequired'));
+      return;
+    }
+    if (reviewUrl.trim() && !/^https:\/\//i.test(reviewUrl.trim())) {
+      toast.error(t('reviewUrlInvalid'));
       return;
     }
     try {
@@ -110,6 +117,7 @@ export function StoresPanel() {
             name: name.trim(),
             code: code.trim(),
             phone: phone.trim(),
+            reviewUrl: reviewUrl.trim(),
           }),
         },
       );
@@ -299,6 +307,19 @@ export function StoresPanel() {
                 maxLength={32}
               />
               <p className="text-xs text-muted-foreground">{t('phoneHelp')}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="store-review-url">{t('reviewUrlLabel')}</Label>
+              <Input
+                id="store-review-url"
+                type="url"
+                inputMode="url"
+                value={reviewUrl}
+                onChange={(e) => setReviewUrl(e.target.value)}
+                placeholder={t('reviewUrlPlaceholder')}
+                maxLength={500}
+              />
+              <p className="text-xs text-muted-foreground">{t('reviewUrlHelp')}</p>
             </div>
           </div>
           <DialogFooter>

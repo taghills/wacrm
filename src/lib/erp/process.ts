@@ -104,6 +104,12 @@ export type StoreLinkResult =
       storeCode: string;
       /** The store's own contact number, or null if nobody set one. */
       storePhone: string | null;
+      /**
+       * This branch's own Google review link, or null to fall back to
+       * the account-wide one. Google attaches reviews to a location,
+       * so a branch's customers belong on that branch's listing.
+       */
+      storeReviewUrl: string | null;
     }
   | { linked: false; reason: string };
 
@@ -436,7 +442,7 @@ export async function linkContactToBranch(
   const { db, accountId } = ctx;
   const { data: stores } = await db
     .from('stores')
-    .select('id, name, code, phone')
+    .select('id, name, code, phone, review_url')
     .eq('account_id', accountId)
     .eq('active', true);
   if (!stores || stores.length === 0) {
@@ -477,6 +483,10 @@ export async function linkContactToBranch(
     storePhone: typeof match.phone === 'string' && match.phone.trim()
       ? match.phone.trim()
       : null,
+    storeReviewUrl:
+      typeof match.review_url === 'string' && match.review_url.trim()
+        ? match.review_url.trim()
+        : null,
   };
 }
 
