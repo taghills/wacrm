@@ -146,13 +146,42 @@ customer belongs to — hence `source = 'erp'`.
 Order-shaped events carry a `branch` display name. It is matched against
 each store's **name and short code**, ignoring case, spaces and
 punctuation, so "Shastri Nagar", "shastri nagar" and "SHNR" all reach
-the same store. A branch that matches nothing is logged and ignored: the
+the same store. A branch that matches nothing never fails the event: the
 message still goes out, and the contact stays visible to owner/admin,
 who can assign it by hand from the contact's Stores card.
 
 Keep the store names/codes in Settings → Stores aligned with the ERP's
 branch names. They do not have to match exactly, but they do have to
 match after case and punctuation are stripped.
+
+### When a branch matches no store
+
+Every event records what the filing did, alongside what the send did:
+
+```
+sent order_confirmation | filed to Shastri Nagar
+contact synced | branch matched no store: Demo Store
+```
+
+`/api/erp/status` collects the second kind into **`unmatchedBranches`**,
+newest first, with a count of how many events each one has affected:
+
+```json
+"unmatchedBranches": [
+  { "branch": "Demo Store", "events": 4, "lastSeen": "2026-10-07T…" }
+]
+```
+
+An empty list is the healthy state. A non-empty one names a store to
+create or rename, and the fix is a one-word edit in Settings → Stores —
+after which new events file correctly. Earlier contacts stay unfiled
+until the next event for them, or until an admin assigns them by hand.
+
+This exists because the failure is otherwise invisible: the customer is
+created, the message is delivered, nothing errors, and only the branch's
+staff notice — by never seeing the customer at all. The scan covers the
+last 500 ledger rows rather than the 50 shown under `events`, so one
+busy, healthy branch cannot push a broken one out of view.
 
 ## Consent
 

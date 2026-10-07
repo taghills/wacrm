@@ -74,6 +74,20 @@ export interface ErpEventOutcome {
   contactId?: string;
 }
 
+/**
+ * Prefix that marks a ledger detail as "the ERP named a branch no
+ * CRM store answers to". `/api/erp/status` searches for this exact
+ * string to list the branch names that are going unfiled, so it is a
+ * wire format between the two files: change it in both or not at all.
+ * The branch name follows the prefix verbatim.
+ */
+export const UNMATCHED_BRANCH = 'branch matched no store: ';
+
+/** What `linkContactToBranch` did, and why, in words fit for the ledger. */
+export type StoreLinkResult =
+  | { linked: true; storeName: string; storeCode: string }
+  | { linked: false; reason: string };
+
 // ------------------------------------------------------------
 // Account + config
 // ------------------------------------------------------------
@@ -386,22 +400,29 @@ async function findOrCreateCustomField(
  * space-insensitively, because the two systems were named by
  * different people at different times ("Shastri" vs "Shashtri").
  *
- * An unmatched branch is logged and ignored rather than failing the
- * event: the message still needs to go out, and a contact with no
- * store link is visible to owner/admin, who can assign it by hand.
+ * An unmatched branch never fails the event: the message still needs
+ * to go out, and a contact with no store link is visible to
+ * owner/admin, who can assign it by hand. But it is not silent
+ * either — the reason comes back to the caller, which writes it into
+ * the event ledger so `/api/erp/status` can show it. A branch that
+ * quietly matches nothing is how a whole store's customers end up
+ * unfiled with no error anywhere, so "logged to stderr" is not
+ * enough: the operator cannot read stderr.
  */
 export async function linkContactToBranch(
   ctx: ErpProcessContext,
   contactId: string,
   branch: string,
-): Promise<boolean> {
+): Promise<StoreLinkResult> {
   const { db, accountId } = ctx;
   const { data: stores } = await db
     .from('stores')
     .select('id, name, code')
     .eq('account_id', accountId)
     .eq('active', true);
-  if (!stores || stores.length === 0) return false;
+  if (!stores || stores.length === 0) {
+    return { linked: false, reason: `${UNMATCHED_BRANCH}${branch} (no active stores)` };
+  }
 
   const key = normalizeStoreKey(branch);
   const match = stores.find(
@@ -411,7 +432,7 @@ export async function linkContactToBranch(
   );
   if (!match) {
     console.warn('[erp] no store matches branch', { branch, accountId });
-    return false;
+    return { linked: false, reason: `${UNMATCHED_BRANCH}${branch}` };
   }
 
   const { error } = await db.from('contact_stores').upsert(
@@ -425,9 +446,12 @@ export async function linkContactToBranch(
   );
   if (error) {
     console.warn('[erp] store link failed:', error.message);
-    return false;
+    return {
+      linked: false,
+      reason: `store link failed for branch ${branch}: ${error.message}`,
+    };
   }
-  return true;
+  return { linked: true, storeName: String(match.name), storeCode: String(match.code) };
 }
 
 /** Lowercase, strip everything that is not a letter or a digit. */
@@ -463,12 +487,23 @@ export async function processErpEvent(
   await syncContactFromErp(ctx, contact.id, customer);
 
   const branch = extractBranch(event);
-  if (branch) await linkContactToBranch(ctx, contact.id, branch);
+  // Every return below carries the filing outcome, because "the
+  // message went out" and "the customer was filed to a store" are
+  // two different things and only the ledger can tell the operator
+  // the second one happened.
+  const link = branch
+    ? await linkContactToBranch(ctx, contact.id, branch)
+    : null;
+  const note = storeLinkNote(link);
 
   // `customer.upsert` is a data event: it keeps the CRM in step with
   // the ERP and deliberately sends nothing.
   if (event.type === 'customer.upsert') {
-    return { status: 'done', detail: 'contact synced', contactId: contact.id };
+    return {
+      status: 'done',
+      detail: withNote('contact synced', note),
+      contactId: contact.id,
+    };
   }
 
   // The send gate. Deliberately AFTER the contact and the store
@@ -478,13 +513,17 @@ export async function processErpEvent(
   // one-branch trial a trial rather than a partial rollout.
   const gate = shouldSendForBranch(branch, ctx.allowedBranches);
   if (!gate.send) {
-    return { status: 'skipped', detail: gate.reason, contactId: contact.id };
+    return {
+      status: 'skipped',
+      detail: withNote(gate.reason, note),
+      contactId: contact.id,
+    };
   }
 
   if (isMarketingEvent(event.type) && contact.marketingOptOut) {
     return {
       status: 'skipped',
-      detail: 'contact opted out of marketing',
+      detail: withNote('contact opted out of marketing', note),
       contactId: contact.id,
     };
   }
@@ -496,10 +535,12 @@ export async function processErpEvent(
   if (!plan) {
     return {
       status: 'skipped',
-      detail:
+      detail: withNote(
         event.type === 'order.delivered'
           ? 'REVIEW_LINK_URL is not set, so there is no review link to send'
           : 'no template mapped for this event',
+        note,
+      ),
       contactId: contact.id,
     };
   }
@@ -520,7 +561,34 @@ export async function processErpEvent(
 
   return {
     status: 'done',
-    detail: `sent ${plan.templateName}`,
+    detail: withNote(`sent ${plan.templateName}`, note),
     contactId: contact.id,
   };
+}
+
+/**
+ * Turn a filing outcome into the clause appended to the ledger
+ * detail. `null` — the event named no branch at all — is deliberately
+ * silent: most non-order events carry no branch and saying so on
+ * every row would bury the rows that matter.
+ */
+export function storeLinkNote(link: StoreLinkResult | null): string | null {
+  if (!link) return null;
+  if (link.linked) return `filed to ${link.storeName}`;
+  return link.reason;
+}
+
+/**
+ * Join a detail and its filing note into one ledger line.
+ *
+ * `detail` is optional because the send gate's decision carries no
+ * reason when it lets an event through; the note alone is still worth
+ * recording in that case.
+ */
+export function withNote(
+  detail: string | undefined,
+  note: string | null,
+): string | undefined {
+  if (!note) return detail;
+  return detail ? `${detail} | ${note}` : note;
 }
