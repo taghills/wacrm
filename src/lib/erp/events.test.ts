@@ -9,6 +9,7 @@ import {
   isMarketingEvent,
   MAX_EVENTS_PER_BATCH,
   parseEventBatch,
+  plainTemplateFor,
   sanitizeParam,
   templatePlanFor,
   type ErpEvent,
@@ -393,5 +394,58 @@ describe('templatePlanFor', () => {
   it('falls back to a greeting when the customer has no name', () => {
     const plan = templatePlanFor(event('order.ready', { ...orderData, customer: { phone: '91999' } }), opts);
     expect(plan?.params[0]).toBe('there');
+  });
+});
+
+describe('orFallback — no parameter is ever empty', () => {
+  // A live demo order failed with "(#131008) Required parameter is
+  // missing" because the order had no expected delivery date, so
+  // {{7}} was an empty string. Meta does not distinguish a blank
+  // value from an absent one; the whole message was refused over one
+  // field.
+
+  it('sends a readable placeholder when the delivery date is missing', () => {
+    const plan = templatePlanFor(
+      event('order.created', { ...orderData, deliveryDate: undefined }),
+      opts,
+    );
+    expect(plan?.params[6]).toBe('To be confirmed');
+  });
+
+  it('never emits an empty string for any order.created parameter', () => {
+    // The strict version of the rule: whatever the ERP omits, nothing
+    // blank reaches Meta.
+    const plan = templatePlanFor(
+      event('order.created', {
+        customer: { name: 'Asha', phone: '91999' },
+        branch: 'demo',
+      }),
+      opts,
+    );
+    expect(plan?.params).toHaveLength(8);
+    for (const p of plan!.params) expect(p).not.toBe('');
+  });
+
+  it('fills a missing bill number and branch on every template', () => {
+    for (const type of ['order.ready', 'order.delivered', 'customer.recall']) {
+      const plan = templatePlanFor(
+        event(type, { customer: { name: 'Asha', phone: '91999' }, branch: 'demo' }),
+        opts,
+      );
+      for (const p of plan!.params) expect(p).not.toBe('');
+    }
+  });
+});
+
+describe('plainTemplateFor', () => {
+  it('pairs each attachment template with its plain twin', () => {
+    expect(plainTemplateFor('order_confirmation_doc')).toBe('order_confirmation');
+    expect(plainTemplateFor('order_delivered_invoice')).toBe('order_delivered');
+  });
+
+  it('returns null for a template with no twin', () => {
+    expect(plainTemplateFor('order_ready')).toBeNull();
+    expect(plainTemplateFor('review_request')).toBeNull();
+    expect(plainTemplateFor('order_confirmation')).toBeNull();
   });
 });

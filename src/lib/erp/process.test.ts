@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildSendParams,
+  downgradeToApprovedTemplate,
   normalizeStoreKey,
   sendFailureDetail,
   storeLinkNote,
@@ -220,5 +221,65 @@ describe('buildSendParams', () => {
     expect(
       buildSendParams({ templateName: 'order_ready', params: [] }, STORE_ID),
     ).toBeUndefined();
+  });
+});
+
+describe('downgradeToApprovedTemplate', () => {
+  // The assurance that turned out to be wrong: "until the _doc
+  // templates exist, the plain versions send instead". They did not.
+  // Once the ERP put a receipt link on every order, every order chose
+  // the _doc template, which Meta had never approved, and failed with
+  // (#132001). The plain version was never reached.
+  const PLAN = {
+    templateName: 'order_confirmation_doc',
+    params: ['Asha', 'demo'],
+    documentUrl: 'https://erp.example/d/abc',
+    documentFilename: 'Receipt-TH-0001.pdf',
+  };
+
+  function ctxWith(rows: Array<{ status: string }>) {
+    return {
+      db: {
+        from: () => ({
+          select: () => ({
+            eq: () => ({ eq: async () => ({ data: rows }) }),
+          }),
+        }),
+      },
+      accountId: 'acc-1',
+      currency: 'INR',
+      reviewUrl: null,
+      reviewDelayDays: 3,
+      allowedBranches: [],
+    } as unknown as Parameters<typeof downgradeToApprovedTemplate>[0];
+  }
+
+  it('drops to the plain template when the variant is not approved', async () => {
+    const out = await downgradeToApprovedTemplate(ctxWith([{ status: 'PENDING' }]), PLAN);
+    expect(out.templateName).toBe('order_confirmation');
+    expect(out.documentUrl).toBeUndefined();
+    expect(out.params).toEqual(PLAN.params);
+  });
+
+  it('drops to the plain template when the variant does not exist', async () => {
+    const out = await downgradeToApprovedTemplate(ctxWith([]), PLAN);
+    expect(out.templateName).toBe('order_confirmation');
+  });
+
+  it('keeps the attachment when the variant is approved', async () => {
+    const out = await downgradeToApprovedTemplate(ctxWith([{ status: 'APPROVED' }]), PLAN);
+    expect(out.templateName).toBe('order_confirmation_doc');
+    expect(out.documentUrl).toBe('https://erp.example/d/abc');
+  });
+
+  it('tolerates a lowercase status', async () => {
+    const out = await downgradeToApprovedTemplate(ctxWith([{ status: 'approved' }]), PLAN);
+    expect(out.templateName).toBe('order_confirmation_doc');
+  });
+
+  it('leaves a plan with no attachment alone, without a database trip', async () => {
+    const plain = { templateName: 'order_ready', params: ['Asha'] };
+    const ctx = { accountId: 'acc-1' } as never; // no db — would throw if used
+    expect(await downgradeToApprovedTemplate(ctx, plain)).toBe(plain);
   });
 });
