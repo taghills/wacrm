@@ -40,6 +40,11 @@ import {
   type ErpEvent,
   type TemplatePlan,
 } from './events';
+import {
+  enqueueReviewRequest,
+  reviewOrderKey,
+  supersedeQueuedReview,
+} from './review-queue';
 import { shouldSendForBranch } from './send-gate';
 
 /** The tag every ERP-sourced contact carries, so they are filterable. */
@@ -58,8 +63,14 @@ export interface ErpProcessContext {
   accountId: string;
   /** Account currency for money variables in templates. */
   currency: string;
-  /** Where `thank_you_feedback` points. Null disables that one event. */
+  /** Where `review_request`'s button points. Null disables that one event. */
   reviewUrl: string | null;
+  /**
+   * Days after delivery before the review request falls due. From
+   * `message_settings` (migration 052), which the operator edits in
+   * Settings -> Messages.
+   */
+  reviewDelayDays: number;
   /**
    * Branches whose events may actually send a WhatsApp message,
    * already normalised. Empty = no gate, every branch sends.
@@ -562,6 +573,14 @@ export async function processErpEvent(
     };
   }
 
+  // The ERP sending its own review request for an order we already
+  // queued must not produce two asks. Done before the send, so the
+  // row is closed even if the send then fails.
+  if (event.type === 'order.review') {
+    const orderKey = reviewOrderKey(event.data);
+    if (orderKey) await supersedeQueuedReview(ctx.db, ctx.accountId, orderKey);
+  }
+
   const plan = templatePlanFor(event, {
     currency: ctx.currency,
     reviewUrl: ctx.reviewUrl,
@@ -599,11 +618,54 @@ export async function processErpEvent(
     templateMessageParams: buildSendParams(plan, ctx.reviewUrl),
   });
 
+  // A delivery owes a review request, a few days from now. Queued
+  // AFTER the send so a failed delivery message does not leave a
+  // review ask behind for an order the customer never heard about.
+  const queued = await queueReviewIfDelivered(ctx, event, contact.id, branch);
+
   return {
     status: 'done',
-    detail: withNote(`sent ${plan.templateName}`, note),
+    detail: withNote(
+      queued
+        ? `sent ${plan.templateName} | review request due ${queued}`
+        : `sent ${plan.templateName}`,
+      note,
+    ),
     contactId: contact.id,
   };
+}
+
+/**
+ * Queue the review request for a delivered order, and report the day
+ * it falls due for the ledger.
+ *
+ * Returns null — and records nothing — when this is not a delivery,
+ * when no review link is configured (there would be nothing to put
+ * on the button), or when the order carries no identifier we can
+ * make unique. That last case is the one worth being strict about:
+ * without a key, every unidentified order in the account would
+ * collide on one queue row.
+ */
+async function queueReviewIfDelivered(
+  ctx: ErpProcessContext,
+  event: ErpEvent,
+  contactId: string,
+  branch: string | null,
+): Promise<string | null> {
+  if (event.type !== 'order.delivered') return null;
+  if (!ctx.reviewUrl) return null;
+
+  const orderKey = reviewOrderKey(event.data);
+  if (!orderKey) return null;
+
+  const dueAt = await enqueueReviewRequest(ctx.db, {
+    accountId: ctx.accountId,
+    contactId,
+    orderKey,
+    branch,
+    delayDays: ctx.reviewDelayDays,
+  });
+  return dueAt ? dueAt.toISOString().slice(0, 10) : null;
 }
 
 /**

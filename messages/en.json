@@ -1689,6 +1689,24 @@
       "wabaSubscribed": "The WhatsApp Business Account is subscribed to this app — inbound webhooks can be delivered.",
       "wabaNotSubscribed": "The WhatsApp Business Account is not subscribed to this app, so Meta will not deliver inbound webhooks. Re-enter the access token and save again to subscribe it."
     },
+    "messages": {
+      "title": "Automatic messages",
+      "description": "Controls for the messages the system sends on its own as orders move through the shop.",
+      "reviewUrlLabel": "Google review link",
+      "reviewUrlPlaceholder": "https://g.page/r/…",
+      "reviewUrlHelp": "Where the “Leave a review” button sends the customer. Must start with https://. Leave it empty to stop sending review requests altogether.",
+      "reviewUrlFromEnv": "This link currently comes from a hosting setting. Saving here takes over from it.",
+      "reviewUrlUnset": "No link is set, so review requests are not being sent.",
+      "delayLabel": "Ask for a review after (days)",
+      "delayHelp": "Days after delivery before the review request goes out. 0 sends it with the delivery message. Maximum {max}.",
+      "save": "Save changes",
+      "saved": "Settings saved",
+      "saveError": "Could not save the settings",
+      "loadError": "Could not load the settings",
+      "urlInvalid": "The review link must start with https://",
+      "delayInvalid": "Enter a whole number of days from 0 to {max}",
+      "scheduleNote": "Review requests are sent by a scheduled job. If nothing is scheduled on this deployment, they stay queued and nothing goes out."
+    },
     "stores": {
       "edit": "Edit",
       "editStore": "Edit store",

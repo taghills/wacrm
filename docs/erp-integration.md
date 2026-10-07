@@ -71,14 +71,42 @@ both are optional, and a non-`https` link is ignored rather than sent,
 because Meta's servers fetch the file and an `http` failure surfaces
 there instead of here.
 
-#### Why the review request is its own event
+#### The review request's delay
 
-The CRM has no scheduler for ERP events, so a "review after N days"
-message cannot be a delayed `order.delivered`. The ERP counts the days
-and emits `order.review` when they have passed. It is classed as
-marketing: **STOP** silences it, and it is submitted to Meta as
-MARKETING because a review request is not about completing the
-customer's order.
+`order.delivered` arrives the moment an order is handed over, but the
+review request should not go out then. So delivery queues a row in
+`erp_review_queue` (migration 052), due `review_delay_days` later, and
+`GET /api/erp/review/cron` drains it.
+
+The delay and the review link are per-account settings, edited at
+**Settings → Automatic messages**. The link previously lived in
+`REVIEW_LINK_URL`; that variable is still honoured as a fallback, but a
+value saved in Settings wins.
+
+**Nothing in this app is scheduled.** Point an external scheduler at
+the review cron, with `AUTOMATION_CRON_SECRET` in the `x-cron-secret`
+header — the same secret the automation and flow crons use, so this is
+one more URL rather than one more secret. It returns 503 until that
+variable is set. Once a day is enough, since the delay is measured in
+days. Running it more often is harmless: a row is claimed before it is
+sent, so overlapping runs cannot send twice.
+
+`/api/erp/status` reports the queue under `reviewQueue`. `overdue:
+true` or `cronConfigured: false` both mean nothing is draining it.
+
+The ERP may still send `order.review` itself. If it does for an order
+the CRM already queued, the queued row is marked skipped rather than
+sending a second ask.
+
+The review request is classed as marketing: **STOP** silences it, and
+it is submitted to Meta as MARKETING because a review request is not
+about completing the customer's order. The opt-out is re-checked at
+send time, not only at delivery — the customer had days to change
+their mind.
+
+Everything else the live path checks is re-checked too, for the same
+reason: the send gate, the store's phone number, and whether a review
+link is still configured.
 
 #### Every template names the branch's phone
 

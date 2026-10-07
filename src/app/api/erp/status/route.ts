@@ -47,6 +47,55 @@ const RECENT_LIMIT = 50;
 const UNMATCHED_SCAN_LIMIT = 500;
 
 /**
+ * The review requests that are queued, sent or skipped.
+ *
+ * A delayed message is the easiest kind to lose: it is owed days
+ * from now, so nobody notices on the day it should have gone out.
+ * `nextDue` is the number to watch — a row due in the past means the
+ * scheduled job is not running, which on this deployment is the
+ * normal failure, since nothing in the app schedules itself.
+ */
+async function reviewQueueSummary(
+  admin: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+): Promise<Record<string, unknown>> {
+  const byStatus: Record<string, number> = {};
+  for (const status of ['pending', 'sending', 'sent', 'skipped', 'failed']) {
+    const { count } = await admin
+      .from('erp_review_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', accountId)
+      .eq('status', status);
+    byStatus[status] = count ?? 0;
+  }
+
+  const { data: next } = await admin
+    .from('erp_review_queue')
+    .select('due_at')
+    .eq('account_id', accountId)
+    .eq('status', 'pending')
+    .order('due_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const nextDue = (next?.due_at as string | undefined) ?? null;
+
+  return {
+    byStatus,
+    nextDue,
+    /**
+     * True when something has been due for over a day and is still
+     * pending — the signal that nothing is calling the review cron.
+     */
+    overdue: nextDue
+      ? Date.now() - new Date(nextDue).getTime() > 24 * 60 * 60 * 1000
+      : false,
+    /** Whether the cron can run at all. 503 until this is set. */
+    cronConfigured: Boolean(process.env.AUTOMATION_CRON_SECRET),
+  };
+}
+
+/**
  * ERP branch names that answer to no CRM store, newest first.
  *
  * The CRM links a customer to a store by matching the ERP's branch
@@ -252,7 +301,13 @@ export async function GET() {
         ERP_API_KEY: Boolean(process.env.ERP_API_KEY),
         ERP_SHARED_SECRET: Boolean(process.env.ERP_SHARED_SECRET),
         ERP_ACCOUNT_ID: Boolean(process.env.ERP_ACCOUNT_ID?.trim()),
+        /**
+         * The legacy home of the review link. Settings -> Automatic
+         * messages wins over it now; this only says whether the old
+         * variable is still set, not whether a link is in use.
+         */
         REVIEW_LINK_URL: Boolean(process.env.REVIEW_LINK_URL?.trim()),
+        AUTOMATION_CRON_SECRET: Boolean(process.env.AUTOMATION_CRON_SECRET),
         /**
          * Shown as the VALUE, not a boolean. The whole point of the
          * gate is knowing exactly which branches are live, and
@@ -292,6 +347,11 @@ export async function GET() {
        * the branch text shown here.
        */
       unmatchedBranches: await unmatchedBranches(admin, ledgerAccountId),
+      /**
+       * The delayed review requests. `overdue: true` or
+       * `cronConfigured: false` both mean nothing is sending them.
+       */
+      reviewQueue: await reviewQueueSummary(admin, ledgerAccountId),
       /**
        * What is in each account. This exists because "the ERP wrote
        * to a different account" is only half an answer — the other

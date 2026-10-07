@@ -29,6 +29,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import { verifyBearer, verifyEventSignature } from '@/lib/erp/signature';
 import { parseEventBatch, MAX_EVENTS_PER_BATCH } from '@/lib/erp/events';
+import { resolveMessageSettings } from '@/lib/erp/message-settings';
 import { parseAllowedBranches } from '@/lib/erp/send-gate';
 import {
   processErpEvent,
@@ -102,11 +103,17 @@ export async function POST(request: Request) {
     .eq('id', accountId)
     .maybeSingle();
 
+  const settings = await resolveMessageSettings(db, accountId);
+
   const ctx: ErpProcessContext = {
     db,
     accountId,
     currency: (account?.default_currency as string) || 'INR',
-    reviewUrl: process.env.REVIEW_LINK_URL?.trim() || null,
+    // From Settings -> Messages, falling back to REVIEW_LINK_URL so
+    // a deployment that set the old environment variable keeps
+    // working without anyone opening Settings first.
+    reviewUrl: settings.reviewUrl,
+    reviewDelayDays: settings.reviewDelayDays,
     allowedBranches: parseAllowedBranches(process.env.ERP_SEND_ONLY_BRANCHES),
   };
 
