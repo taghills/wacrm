@@ -122,6 +122,20 @@ export async function PUT(request: Request) {
 
     if (error) {
       console.error('[PUT /api/settings/messages] upsert error:', error);
+      // 42501 is Postgres' insufficient_privilege. On this project it
+      // means a table reached production with its RLS policies but
+      // without the matching GRANT — the exact gap migration 052 left
+      // and 054 closed. "Failed to save settings" sent the operator
+      // hunting through the form; this sends them to the migration.
+      if (error.code === '42501') {
+        return NextResponse.json(
+          {
+            error:
+              'The database has not granted access to this table. A migration is probably missing — run Deploy Supabase Migrations.',
+          },
+          { status: 500 },
+        );
+      }
       return NextResponse.json(
         { error: 'Failed to save settings' },
         { status: 500 },
