@@ -82,6 +82,16 @@ The delay is a per-account setting, edited at **Settings → Automatic
 messages**.
 
 The **review link is per store**, edited at **Settings → Stores**.
+
+The template's button points at `https://wa.taghills.com/r/{{1}}`, and
+the send fills `{{1}}` with the serving store's id. Meta allows one
+variable on a URL button and only as a suffix on a fixed base, so the
+branch's own Google link cannot go on the button — four shops have four
+unrelated links and there is no fixed base to hang them off. `/r/<store
+id>` (public, `src/app/r/[id]/route.ts`) resolves it at tap time, which
+also means a review link changed in Settings takes effect on the next
+message with no Meta re-approval.
+
 Google attaches reviews to a location, so each branch has its own
 listing, its own star rating and its own link; one link for a
 multi-branch business puts every review on the wrong branch's listing.
