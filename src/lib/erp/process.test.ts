@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   normalizeStoreKey,
+  sendFailureDetail,
   storeLinkNote,
   UNMATCHED_BRANCH,
   withNote,
@@ -111,5 +112,65 @@ describe('normalizeStoreKey', () => {
     expect(normalizeStoreKey('Rohini Sec 7')).not.toBe(
       normalizeStoreKey('Rohini Sec 9'),
     );
+  });
+});
+
+describe('sendFailureDetail', () => {
+  // Written after a live test came back as
+  //   "Meta API error: (#132001) Template name does not exist in the
+  //    translation"
+  // which is the same string for every template and says nothing
+  // about the document header — so the one question the test existed
+  // to answer could not be answered from the ledger.
+  const META_ERROR = new Error(
+    'Meta API error: (#132001) Template name does not exist in the translation',
+  );
+
+  it('names the template and its attachment', () => {
+    expect(
+      sendFailureDetail(
+        {
+          templateName: 'order_confirmation_doc',
+          params: [],
+          documentUrl: 'https://erp.example/d/8f2c91',
+          documentFilename: 'Receipt-TH-0001.pdf',
+        },
+        META_ERROR,
+      ),
+    ).toBe(
+      'sending order_confirmation_doc with Receipt-TH-0001.pdf failed: ' +
+        'Meta API error: (#132001) Template name does not exist in the translation',
+    );
+  });
+
+  it('distinguishes the plain template from the attachment one', () => {
+    // The whole point: these two must not read alike, because which
+    // one was attempted is how you tell whether the ERP sent a PDF
+    // link at all.
+    const plain = sendFailureDetail(
+      { templateName: 'order_confirmation', params: [] },
+      META_ERROR,
+    );
+    expect(plain).toContain('sending order_confirmation failed');
+    expect(plain).not.toContain('with');
+  });
+
+  it('still says something useful when there is no filename', () => {
+    expect(
+      sendFailureDetail(
+        {
+          templateName: 'order_delivered_invoice',
+          params: [],
+          documentUrl: 'https://erp.example/d/abc',
+        },
+        META_ERROR,
+      ),
+    ).toContain('with an attachment');
+  });
+
+  it('handles a thrown non-Error', () => {
+    expect(
+      sendFailureDetail({ templateName: 'order_ready', params: [] }, 'socket hang up'),
+    ).toBe('sending order_ready failed: socket hang up');
   });
 });

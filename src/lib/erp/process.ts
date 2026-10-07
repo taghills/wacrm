@@ -616,17 +616,26 @@ export async function processErpEvent(
     customer.name ?? null,
   );
 
-  await sendMessageToConversation(ctx.db, ctx.accountId, {
-    conversationId,
-    messageType: 'template',
-    templateName: plan.templateName,
-    templateParams: plan.params,
-    // The structured form is what carries a DOCUMENT header and a URL
-    // button through to Meta; `templateParams` alone reaches the body
-    // only. Passed only when there is something to put in it, so the
-    // plain templates keep the simpler, well-tested path.
-    templateMessageParams: buildSendParams(plan, ctx.reviewUrl),
-  });
+  try {
+    await sendMessageToConversation(ctx.db, ctx.accountId, {
+      conversationId,
+      messageType: 'template',
+      templateName: plan.templateName,
+      templateParams: plan.params,
+      // The structured form is what carries a DOCUMENT header and a URL
+      // button through to Meta; `templateParams` alone reaches the body
+      // only. Passed only when there is something to put in it, so the
+      // plain templates keep the simpler, well-tested path.
+      templateMessageParams: buildSendParams(plan, ctx.reviewUrl),
+    });
+  } catch (err) {
+    // Meta's own errors name neither the template nor the attachment:
+    // "(#132001) Template name does not exist in the translation" is
+    // the same string whichever template was tried. That left the
+    // ledger unable to answer the question a failed send most often
+    // raises — WHICH message was this, and did it carry its PDF.
+    throw new Error(sendFailureDetail(plan, err));
+  }
 
   // A delivery owes a review request, a few days from now. Queued
   // AFTER the send so a failed delivery message does not leave a
@@ -676,6 +685,25 @@ async function queueReviewIfDelivered(
     delayDays: ctx.reviewDelayDays,
   });
   return dueAt ? dueAt.toISOString().slice(0, 10) : null;
+}
+
+/**
+ * What to record in the ledger when a send fails.
+ *
+ * Names the template that was attempted and whether it carried its
+ * attachment, then the underlying error. Without this the ledger
+ * holds only Meta's message, which is identical for every template
+ * and says nothing about the document header — so a failure could
+ * not distinguish `order_confirmation` from `order_confirmation_doc`,
+ * which is exactly how you tell whether the ERP's PDF link was
+ * picked up.
+ */
+export function sendFailureDetail(plan: TemplatePlan, err: unknown): string {
+  const reason = err instanceof Error ? err.message : String(err);
+  const attachment = plan.documentUrl
+    ? ` with ${plan.documentFilename ?? 'an attachment'}`
+    : '';
+  return `sending ${plan.templateName}${attachment} failed: ${reason}`;
 }
 
 /**
