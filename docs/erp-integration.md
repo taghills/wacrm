@@ -83,11 +83,21 @@ The delay and the review link are per-account settings, edited at
 `REVIEW_LINK_URL`; that variable is still honoured as a fallback, but a
 value saved in Settings wins.
 
-**Nothing in this app is scheduled.** Point an external scheduler at
-the review cron, with `AUTOMATION_CRON_SECRET` in the `x-cron-secret`
-header — the same secret the automation and flow crons use, so this is
-one more URL rather than one more secret. It returns 503 until that
-variable is set. Once a day is enough, since the delay is measured in
+**Nothing in this app is scheduled**, and Hostinger's Node app hosting
+has no cron of its own, so the clock lives in GitHub Actions:
+`.github/workflows/review-cron.yml` calls the endpoint daily at 03:30
+UTC (09:00 IST) and can be run by hand from the Actions tab. It needs
+`AUTOMATION_CRON_SECRET` as a repository secret, matching the app's own
+environment variable of the same name — the same secret the automation
+and flow crons use, so this is one more URL rather than one more
+secret. The endpoint returns 503 until the app has that variable set,
+and the workflow fails loudly (which emails you) on anything but a 200.
+
+Any other scheduler works the same way: `GET` the endpoint with the
+secret in the `x-cron-secret` header.
+
+GitHub disables scheduled workflows in a repository idle for 60 days.
+If review requests stop, check the workflow is still enabled first. Once a day is enough, since the delay is measured in
 days. Running it more often is harmless: a row is claimed before it is
 sent, so overlapping runs cannot send twice.
 

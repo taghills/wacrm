@@ -1,0 +1,85 @@
+name: Send due review requests
+
+# Nothing inside the app is scheduled, and this deployment (Hostinger's
+# Node app hosting) has no cron of its own. So the clock lives here.
+#
+# `order.delivered` queues a row in erp_review_queue due a few days
+# out; this calls the drain that sends them. Once a day is enough —
+# the delay is measured in days, so a row due today goes out on
+# whichever run happens next.
+#
+# 03:30 UTC is 09:00 in India: a review request should arrive during
+# shop hours, not at midnight.
+#
+# GitHub delays scheduled runs under load, sometimes by tens of
+# minutes. That is fine for a daily job and would not be for a
+# minute-accurate one.
+#
+# Caveat worth knowing: GitHub disables scheduled workflows in a
+# repository with no activity for 60 days, and says so by email. If
+# review requests ever stop, check that this workflow is still
+# enabled before looking anywhere else — /api/erp/status will show
+# the queue going overdue.
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  # So you can run it by hand from the Actions tab to test it, without
+  # waiting for tomorrow.
+  workflow_dispatch:
+
+jobs:
+  drain:
+    name: Drain the review queue
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call the review cron
+        env:
+          # Must match AUTOMATION_CRON_SECRET in the app's own
+          # environment. Stored as a repository secret, so it is never
+          # printed in a log.
+          CRON_SECRET: ${{ secrets.AUTOMATION_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::AUTOMATION_CRON_SECRET is not set as a repository secret."
+            echo "Add it under Settings -> Secrets and variables -> Actions,"
+            echo "with the same value the app has in its own environment."
+            exit 1
+          fi
+
+          # -sS keeps curl quiet but still prints real errors.
+          # The body and status are captured separately so a failure
+          # reports what the endpoint actually said.
+          response=$(mktemp)
+          status=$(curl -sS -o "${response}" -w '%{http_code}' \
+            --max-time 300 \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            https://wa.taghills.com/api/erp/review/cron)
+
+          body=$(cat "${response}")
+          echo "HTTP ${status}"
+          echo "${body}"
+
+          case "${status}" in
+            200)
+              # e.g. {"sent":2,"skipped":0,"failed":0}
+              echo "::notice::Review queue drained: ${body}"
+              ;;
+            401)
+              echo "::error::The secret here does not match the app's AUTOMATION_CRON_SECRET."
+              exit 1
+              ;;
+            503)
+              echo "::error::The app has no AUTOMATION_CRON_SECRET set, so the endpoint is switched off. Set it in the hosting environment and redeploy."
+              exit 1
+              ;;
+            *)
+              # A failing job emails you. That is the point: a delayed
+              # message that never sends is otherwise silent.
+              echo "::error::Unexpected response ${status} from the review cron."
+              exit 1
+              ;;
+          esac
