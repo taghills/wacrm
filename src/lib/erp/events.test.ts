@@ -258,6 +258,49 @@ describe('templatePlanFor', () => {
     expect(plan?.documentUrl).toBeUndefined();
   });
 
+  it('is not fooled by an empty invoicePdf beside a real receiptPdf', () => {
+    // The trap in the old `invoicePdf ?? receiptPdf`: `??` falls
+    // through only on null and undefined, so an empty string won.
+    // The result was indistinguishable from the ERP sending no link,
+    // which is exactly the ambiguity a live test ran into.
+    const plan = templatePlanFor(
+      event('order.created', {
+        ...orderData,
+        invoicePdf: '',
+        receiptPdf: 'https://erp.taghills.com/d/abc',
+      }),
+      opts,
+    );
+    expect(plan?.templateName).toBe('order_confirmation_doc');
+    expect(plan?.documentUrl).toBe('https://erp.taghills.com/d/abc');
+  });
+
+  it('takes the invoice on a delivery, not a receipt that rode along', () => {
+    const plan = templatePlanFor(
+      event('order.delivered', {
+        ...orderData,
+        receiptPdf: 'https://erp.taghills.com/r/receipt.pdf',
+        invoicePdf: 'https://erp.taghills.com/i/invoice.pdf',
+      }),
+      opts,
+    );
+    expect(plan?.documentUrl).toBe('https://erp.taghills.com/i/invoice.pdf');
+  });
+
+  it('falls back to the other field when the expected one is blank', () => {
+    // Forgiving rather than strict: a delivery whose invoice link is
+    // missing but which carries a receipt still gets an attachment.
+    const plan = templatePlanFor(
+      event('order.delivered', {
+        ...orderData,
+        invoicePdf: '   ',
+        receiptPdf: 'https://erp.taghills.com/r/receipt.pdf',
+      }),
+      opts,
+    );
+    expect(plan?.documentUrl).toBe('https://erp.taghills.com/r/receipt.pdf');
+  });
+
   it('maps order.ready with the branch and the number', () => {
     const plan = templatePlanFor(event('order.ready', orderData), opts);
     expect(plan?.templateName).toBe('order_ready');

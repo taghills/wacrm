@@ -306,12 +306,34 @@ export function requiresBranchPhone(type: string): boolean {
  */
 export function extractDocumentUrl(event: ErpEvent): string | null {
   const data = event.data;
-  const raw = data.invoicePdf ?? data.receiptPdf;
-  if (typeof raw !== 'string') return null;
-  const url = raw.trim();
-  // Only https: a document header is fetched by Meta's servers, and
-  // an http link fails there rather than here, which is a far worse
-  // place to find out.
+
+  // Picked by EVENT TYPE, not by whichever field happens to be
+  // present. The previous `data.invoicePdf ?? data.receiptPdf` had a
+  // trap: `??` only falls through on null and undefined, so an ERP
+  // sending `invoicePdf: ""` beside a perfectly good `receiptPdf`
+  // would take the empty string and silently send no attachment —
+  // indistinguishable from the ERP sending no link at all.
+  const primary = event.type === 'order.delivered'
+    ? data.invoicePdf
+    : data.receiptPdf;
+  const secondary = event.type === 'order.delivered'
+    ? data.receiptPdf
+    : data.invoicePdf;
+
+  return httpsUrl(primary) ?? httpsUrl(secondary);
+}
+
+/**
+ * A value we are willing to hand Meta as a document link.
+ *
+ * Only https: a document header is fetched by Meta's servers, so an
+ * http link fails there rather than here, which is a far worse place
+ * to find out. Blank and non-string both read as absent, so "no PDF"
+ * has one meaning however the ERP expresses it.
+ */
+function httpsUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const url = value.trim();
   if (!url.toLowerCase().startsWith('https://')) return null;
   return url;
 }
