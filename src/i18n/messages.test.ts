@@ -412,3 +412,69 @@ describe('message placeholder parity', () => {
     },
   );
 });
+
+// ------------------------------------------------------------
+// The direction the parity check above cannot see.
+//
+// Those tests compare the locales to each other, so a key missing
+// from ALL FOUR passes them. That is exactly how the Automatic
+// messages section shipped with "Settings.sections.messages" printed
+// in the rail where its name should have been: the panel's own
+// strings were added to every locale, the one the rail reads was
+// added to none.
+//
+// These assert the other direction — that what the CODE asks for
+// exists — for the two lists a new settings section has to join.
+// ------------------------------------------------------------
+
+describe('settings sections are named in every locale', () => {
+  it('has a Settings.sections entry for each section', async () => {
+    const { SETTINGS_SECTIONS } = await import(
+      '@/components/settings/settings-sections'
+    );
+    for (const locale of [SOURCE_LOCALE, ...TRANSLATED_LOCALES]) {
+      const leaves = loadLeaves(locale);
+      for (const section of SETTINGS_SECTIONS) {
+        expect(
+          leaves.has(`Settings.sections.${section}`),
+          `${locale}.json is missing Settings.sections.${section} — the rail will print the raw key`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('lets Roles & access govern every settings section', async () => {
+    // A section absent from ACCESS_MODULES cannot be hidden by a role,
+    // so it quietly escapes the one screen that exists to control
+    // what staff see.
+    const { SETTINGS_SECTIONS } = await import(
+      '@/components/settings/settings-sections'
+    );
+    const { ACCESS_MODULES } = await import('@/lib/access/modules');
+    const modules = ACCESS_MODULES as readonly string[];
+
+    for (const section of SETTINGS_SECTIONS) {
+      if (section === 'overview') continue; // the landing page, not a governed area
+      expect(
+        modules.includes(`settings.${section}`),
+        `ACCESS_MODULES is missing settings.${section}`,
+      ).toBe(true);
+    }
+  });
+
+  it('labels every settings module in Roles & access', async () => {
+    const { ACCESS_MODULES } = await import('@/lib/access/modules');
+    for (const locale of [SOURCE_LOCALE, ...TRANSLATED_LOCALES]) {
+      const leaves = loadLeaves(locale);
+      for (const mod of ACCESS_MODULES as readonly string[]) {
+        // next-intl reads a dot as a path separator, so the catalogue
+        // spells these with an underscore (see roles-panel.tsx).
+        const key = `Settings.accessRoles.modules.${mod.replace('.', '_')}`;
+        expect(
+          leaves.has(key),
+          `${locale}.json is missing ${key}`,
+        ).toBe(true);
+      }
+    }
+  });
+});
