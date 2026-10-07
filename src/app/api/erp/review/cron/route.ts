@@ -29,6 +29,7 @@ import {
 } from '@/lib/erp/process';
 import {
   dueReviewRequests,
+  resolveReviewUrl,
   settleReviewRequest,
   type ReviewQueueRow,
 } from '@/lib/erp/review-queue';
@@ -135,9 +136,10 @@ async function sendOneReview(
     settings = await resolveMessageSettings(admin, row.account_id);
     settingsCache.set(row.account_id, settings);
   }
-  if (!settings.reviewUrl) {
-    return { status: 'skipped', detail: 'no review link is configured' };
-  }
+  // The review link is NOT checked here. A store can carry its own,
+  // so "is there a link" cannot be answered until the store is known
+  // — checking the account-wide one first would skip a branch that
+  // has its own listing while the account field sits empty.
 
   const gate = shouldSendForBranch(row.branch, allowedBranches);
   if (!gate.send) {
@@ -170,10 +172,31 @@ async function sendOneReview(
     reviewDelayDays: settings.reviewDelayDays,
     allowedBranches,
   };
+  // NOTE: ctx.reviewUrl is the account-wide link, used only to resolve
+  // the store below. The link that actually reaches the customer is
+  // `reviewUrl`, chosen after the store is known.
   const link = row.branch
     ? await linkContactToBranch(ctx, contact.id as string, row.branch)
     : null;
   const branchPhone = link?.linked ? link.storePhone : null;
+
+  // The branch's own Google listing wins over the account-wide link.
+  // Reviews attach to a location, so a Bahadurgarh customer belongs
+  // on Bahadurgarh's listing. The account link is the fallback, so
+  // the branches' links can be collected one at a time without the
+  // message breaking for the rest.
+  const reviewUrl = resolveReviewUrl(
+    link?.linked ? link.storeReviewUrl : null,
+    settings.reviewUrl,
+  );
+  if (!reviewUrl) {
+    return {
+      status: 'skipped',
+      detail: link?.linked
+        ? `no review link for ${link.storeName}, and no account-wide link to fall back on`
+        : 'no review link is configured',
+    };
+  }
   if (!branchPhone) {
     return {
       status: 'skipped',
@@ -194,7 +217,7 @@ async function sendOneReview(
       },
     },
     {
-      reviewUrl: settings.reviewUrl,
+      reviewUrl,
       branchPhone,
     },
   );
@@ -214,7 +237,7 @@ async function sendOneReview(
     messageType: 'template',
     templateName: plan.templateName,
     templateParams: plan.params,
-    templateMessageParams: buildSendParams(plan, settings.reviewUrl),
+    templateMessageParams: buildSendParams(plan, reviewUrl),
   });
 
   return { status: 'sent', detail: `sent ${plan.templateName}` };

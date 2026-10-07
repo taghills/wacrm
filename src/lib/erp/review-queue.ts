@@ -171,3 +171,30 @@ export async function settleReviewRequest(
     console.warn('[erp] review queue settle failed:', error.message);
   }
 }
+
+/**
+ * Which Google review link a customer should be sent to.
+ *
+ * The branch that served them wins. Google attaches reviews to a
+ * LOCATION, so a Bahadurgarh customer belongs on Bahadurgarh's
+ * listing — an account-wide link would put their review on the wrong
+ * branch's star rating, and a customer who opens a page naming a
+ * shop they have never visited usually just closes it.
+ *
+ * The account-wide link is the fallback, which is what makes a
+ * staged rollout possible: the branches' links can be collected one
+ * at a time without the review message breaking for the others.
+ *
+ * Null when neither exists — the caller then skips rather than
+ * sending a button with nowhere to go.
+ */
+export function resolveReviewUrl(
+  storeReviewUrl: string | null | undefined,
+  accountReviewUrl: string | null | undefined,
+): string | null {
+  const store = typeof storeReviewUrl === 'string' ? storeReviewUrl.trim() : '';
+  if (store) return store;
+  const account =
+    typeof accountReviewUrl === 'string' ? accountReviewUrl.trim() : '';
+  return account || null;
+}

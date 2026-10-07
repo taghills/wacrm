@@ -26,6 +26,7 @@ describe('storeLinkNote', () => {
         storeName: 'Demo',
         storeCode: 'DEMO',
         storePhone: '+91 76786 88524',
+        storeReviewUrl: null,
       }),
     ).toBe('filed to Demo');
   });

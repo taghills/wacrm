@@ -78,8 +78,20 @@ review request should not go out then. So delivery queues a row in
 `erp_review_queue` (migration 052), due `review_delay_days` later, and
 `GET /api/erp/review/cron` drains it.
 
-The delay and the review link are per-account settings, edited at
-**Settings → Automatic messages**. The link previously lived in
+The delay is a per-account setting, edited at **Settings → Automatic
+messages**.
+
+The **review link is per store**, edited at **Settings → Stores**.
+Google attaches reviews to a location, so each branch has its own
+listing, its own star rating and its own link; one link for a
+multi-branch business puts every review on the wrong branch's listing.
+The account-wide link in Settings → Automatic messages is the fallback
+for a store that has none yet, which is what lets the links be
+collected one branch at a time. When neither exists the review request
+is skipped, naming the store.
+
+`/api/erp/status` reports `hasPhone` and `hasReviewLink` per store, so
+an unfilled branch is visible before it costs a message. The link previously lived in
 `REVIEW_LINK_URL`; that variable is still honoured as a fallback, but a
 value saved in Settings wins.
 

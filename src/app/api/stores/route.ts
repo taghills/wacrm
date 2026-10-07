@@ -29,6 +29,7 @@ import {
 const NAME_MAX = 80;
 const CODE_MAX = 16;
 const PHONE_MAX = 32;
+const REVIEW_URL_MAX = 500;
 
 export async function GET() {
   try {
@@ -36,7 +37,7 @@ export async function GET() {
 
     const { data, error } = await ctx.supabase
       .from('stores')
-      .select('id, name, code, phone, active, created_at')
+      .select('id, name, code, phone, review_url, active, created_at')
       .eq('account_id', ctx.accountId)
       .order('name', { ascending: true });
 
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
       name?: unknown;
       code?: unknown;
       phone?: unknown;
+      reviewUrl?: unknown;
     } | null;
 
     const name = typeof body?.name === 'string' ? body.name.trim() : '';
@@ -98,6 +100,25 @@ export async function POST(request: Request) {
       );
     }
 
+    // Google attaches reviews to a location, so each branch has its
+    // own listing and its own link. https only: Meta refuses any
+    // other scheme on a template's URL button, and a link the
+    // customer cannot open is worse than no message.
+    const reviewRaw =
+      typeof body?.reviewUrl === 'string' ? body.reviewUrl.trim() : '';
+    if (reviewRaw.length > REVIEW_URL_MAX) {
+      return NextResponse.json(
+        { error: `'reviewUrl' must be at most ${REVIEW_URL_MAX} characters` },
+        { status: 400 },
+      );
+    }
+    if (reviewRaw && !/^https:\/\/\S+$/i.test(reviewRaw)) {
+      return NextResponse.json(
+        { error: 'The review link must start with https://' },
+        { status: 400 },
+      );
+    }
+
     const { data, error } = await ctx.supabase
       .from('stores')
       .insert({
@@ -105,8 +126,9 @@ export async function POST(request: Request) {
         name,
         code,
         phone: phoneRaw || null,
+        review_url: reviewRaw || null,
       })
-      .select('id, name, code, phone, active, created_at')
+      .select('id, name, code, phone, review_url, active, created_at')
       .single();
 
     if (error) {

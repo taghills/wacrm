@@ -25,6 +25,7 @@ import {
 const NAME_MAX = 80;
 const CODE_MAX = 16;
 const PHONE_MAX = 32;
+const REVIEW_URL_MAX = 500;
 
 export async function PATCH(
   request: Request,
@@ -44,6 +45,7 @@ export async function PATCH(
       name?: unknown;
       code?: unknown;
       phone?: unknown;
+      reviewUrl?: unknown;
       active?: unknown;
     } | null;
 
@@ -84,6 +86,26 @@ export async function PATCH(
       patch.phone = phone || null;
     }
 
+    if (body?.reviewUrl !== undefined) {
+      // Clearing it is a legitimate edit — the store then falls back
+      // to the account-wide link.
+      const url =
+        typeof body.reviewUrl === 'string' ? body.reviewUrl.trim() : '';
+      if (url.length > REVIEW_URL_MAX) {
+        return NextResponse.json(
+          { error: `'reviewUrl' must be at most ${REVIEW_URL_MAX} characters` },
+          { status: 400 },
+        );
+      }
+      if (url && !/^https:\/\/\S+$/i.test(url)) {
+        return NextResponse.json(
+          { error: 'The review link must start with https://' },
+          { status: 400 },
+        );
+      }
+      patch.review_url = url || null;
+    }
+
     if (body?.active !== undefined) {
       if (typeof body.active !== 'boolean') {
         return NextResponse.json(
@@ -108,7 +130,7 @@ export async function PATCH(
       .from('stores')
       .update(patch)
       .eq('id', id)
-      .select('id, name, code, phone, active, created_at')
+      .select('id, name, code, phone, review_url, active, created_at')
       .maybeSingle();
 
     if (error) {
