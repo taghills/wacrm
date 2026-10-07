@@ -34,10 +34,17 @@ import {
   extractCustomer,
   isKnownEventType,
   isMarketingEvent,
+  requiresBranchPhone,
   templatePlanFor,
   type ErpCustomer,
   type ErpEvent,
+  type TemplatePlan,
 } from './events';
+import {
+  enqueueReviewRequest,
+  reviewOrderKey,
+  supersedeQueuedReview,
+} from './review-queue';
 import { shouldSendForBranch } from './send-gate';
 
 /** The tag every ERP-sourced contact carries, so they are filterable. */
@@ -56,8 +63,14 @@ export interface ErpProcessContext {
   accountId: string;
   /** Account currency for money variables in templates. */
   currency: string;
-  /** Where `thank_you_feedback` points. Null disables that one event. */
+  /** Where `review_request`'s button points. Null disables that one event. */
   reviewUrl: string | null;
+  /**
+   * Days after delivery before the review request falls due. From
+   * `message_settings` (migration 052), which the operator edits in
+   * Settings -> Messages.
+   */
+  reviewDelayDays: number;
   /**
    * Branches whose events may actually send a WhatsApp message,
    * already normalised. Empty = no gate, every branch sends.
@@ -73,6 +86,26 @@ export interface ErpEventOutcome {
   detail?: string;
   contactId?: string;
 }
+
+/**
+ * Prefix that marks a ledger detail as "the ERP named a branch no
+ * CRM store answers to". `/api/erp/status` searches for this exact
+ * string to list the branch names that are going unfiled, so it is a
+ * wire format between the two files: change it in both or not at all.
+ * The branch name follows the prefix verbatim.
+ */
+export const UNMATCHED_BRANCH = 'branch matched no store: ';
+
+/** What `linkContactToBranch` did, and why, in words fit for the ledger. */
+export type StoreLinkResult =
+  | {
+      linked: true;
+      storeName: string;
+      storeCode: string;
+      /** The store's own contact number, or null if nobody set one. */
+      storePhone: string | null;
+    }
+  | { linked: false; reason: string };
 
 // ------------------------------------------------------------
 // Account + config
@@ -386,22 +419,29 @@ async function findOrCreateCustomField(
  * space-insensitively, because the two systems were named by
  * different people at different times ("Shastri" vs "Shashtri").
  *
- * An unmatched branch is logged and ignored rather than failing the
- * event: the message still needs to go out, and a contact with no
- * store link is visible to owner/admin, who can assign it by hand.
+ * An unmatched branch never fails the event: the message still needs
+ * to go out, and a contact with no store link is visible to
+ * owner/admin, who can assign it by hand. But it is not silent
+ * either — the reason comes back to the caller, which writes it into
+ * the event ledger so `/api/erp/status` can show it. A branch that
+ * quietly matches nothing is how a whole store's customers end up
+ * unfiled with no error anywhere, so "logged to stderr" is not
+ * enough: the operator cannot read stderr.
  */
 export async function linkContactToBranch(
   ctx: ErpProcessContext,
   contactId: string,
   branch: string,
-): Promise<boolean> {
+): Promise<StoreLinkResult> {
   const { db, accountId } = ctx;
   const { data: stores } = await db
     .from('stores')
-    .select('id, name, code')
+    .select('id, name, code, phone')
     .eq('account_id', accountId)
     .eq('active', true);
-  if (!stores || stores.length === 0) return false;
+  if (!stores || stores.length === 0) {
+    return { linked: false, reason: `${UNMATCHED_BRANCH}${branch} (no active stores)` };
+  }
 
   const key = normalizeStoreKey(branch);
   const match = stores.find(
@@ -411,7 +451,7 @@ export async function linkContactToBranch(
   );
   if (!match) {
     console.warn('[erp] no store matches branch', { branch, accountId });
-    return false;
+    return { linked: false, reason: `${UNMATCHED_BRANCH}${branch}` };
   }
 
   const { error } = await db.from('contact_stores').upsert(
@@ -425,9 +465,19 @@ export async function linkContactToBranch(
   );
   if (error) {
     console.warn('[erp] store link failed:', error.message);
-    return false;
+    return {
+      linked: false,
+      reason: `store link failed for branch ${branch}: ${error.message}`,
+    };
   }
-  return true;
+  return {
+    linked: true,
+    storeName: String(match.name),
+    storeCode: String(match.code),
+    storePhone: typeof match.phone === 'string' && match.phone.trim()
+      ? match.phone.trim()
+      : null,
+  };
 }
 
 /** Lowercase, strip everything that is not a letter or a digit. */
@@ -463,12 +513,23 @@ export async function processErpEvent(
   await syncContactFromErp(ctx, contact.id, customer);
 
   const branch = extractBranch(event);
-  if (branch) await linkContactToBranch(ctx, contact.id, branch);
+  // Every return below carries the filing outcome, because "the
+  // message went out" and "the customer was filed to a store" are
+  // two different things and only the ledger can tell the operator
+  // the second one happened.
+  const link = branch
+    ? await linkContactToBranch(ctx, contact.id, branch)
+    : null;
+  const note = storeLinkNote(link);
 
   // `customer.upsert` is a data event: it keeps the CRM in step with
   // the ERP and deliberately sends nothing.
   if (event.type === 'customer.upsert') {
-    return { status: 'done', detail: 'contact synced', contactId: contact.id };
+    return {
+      status: 'done',
+      detail: withNote('contact synced', note),
+      contactId: contact.id,
+    };
   }
 
   // The send gate. Deliberately AFTER the contact and the store
@@ -478,28 +539,62 @@ export async function processErpEvent(
   // one-branch trial a trial rather than a partial rollout.
   const gate = shouldSendForBranch(branch, ctx.allowedBranches);
   if (!gate.send) {
-    return { status: 'skipped', detail: gate.reason, contactId: contact.id };
+    return {
+      status: 'skipped',
+      detail: withNote(gate.reason, note),
+      contactId: contact.id,
+    };
   }
 
   if (isMarketingEvent(event.type) && contact.marketingOptOut) {
     return {
       status: 'skipped',
-      detail: 'contact opted out of marketing',
+      detail: withNote('contact opted out of marketing', note),
       contactId: contact.id,
     };
+  }
+
+  // Every approved template closes by naming the branch's own phone
+  // number, so a store with no number cannot send. Checked here, by
+  // name, because "no template mapped" would send the operator
+  // hunting through template settings for a missing field in
+  // Settings -> Stores.
+  const branchPhone = link?.linked ? link.storePhone : null;
+  if (requiresBranchPhone(event.type) && !branchPhone) {
+    return {
+      status: 'skipped',
+      detail: withNote(
+        link?.linked
+          ? `store ${link.storeName} has no contact number: set it in Settings -> Stores`
+          : 'cannot tell which store is sending, so there is no contact number for the message',
+        note,
+      ),
+      contactId: contact.id,
+    };
+  }
+
+  // The ERP sending its own review request for an order we already
+  // queued must not produce two asks. Done before the send, so the
+  // row is closed even if the send then fails.
+  if (event.type === 'order.review') {
+    const orderKey = reviewOrderKey(event.data);
+    if (orderKey) await supersedeQueuedReview(ctx.db, ctx.accountId, orderKey);
   }
 
   const plan = templatePlanFor(event, {
     currency: ctx.currency,
     reviewUrl: ctx.reviewUrl,
+    branchPhone,
   });
   if (!plan) {
     return {
       status: 'skipped',
-      detail:
-        event.type === 'order.delivered'
+      detail: withNote(
+        event.type === 'order.review'
           ? 'REVIEW_LINK_URL is not set, so there is no review link to send'
           : 'no template mapped for this event',
+        note,
+      ),
       contactId: contact.id,
     };
   }
@@ -516,11 +611,109 @@ export async function processErpEvent(
     messageType: 'template',
     templateName: plan.templateName,
     templateParams: plan.params,
+    // The structured form is what carries a DOCUMENT header and a URL
+    // button through to Meta; `templateParams` alone reaches the body
+    // only. Passed only when there is something to put in it, so the
+    // plain templates keep the simpler, well-tested path.
+    templateMessageParams: buildSendParams(plan, ctx.reviewUrl),
   });
+
+  // A delivery owes a review request, a few days from now. Queued
+  // AFTER the send so a failed delivery message does not leave a
+  // review ask behind for an order the customer never heard about.
+  const queued = await queueReviewIfDelivered(ctx, event, contact.id, branch);
 
   return {
     status: 'done',
-    detail: `sent ${plan.templateName}`,
+    detail: withNote(
+      queued
+        ? `sent ${plan.templateName} | review request due ${queued}`
+        : `sent ${plan.templateName}`,
+      note,
+    ),
     contactId: contact.id,
   };
+}
+
+/**
+ * Queue the review request for a delivered order, and report the day
+ * it falls due for the ledger.
+ *
+ * Returns null — and records nothing — when this is not a delivery,
+ * when no review link is configured (there would be nothing to put
+ * on the button), or when the order carries no identifier we can
+ * make unique. That last case is the one worth being strict about:
+ * without a key, every unidentified order in the account would
+ * collide on one queue row.
+ */
+async function queueReviewIfDelivered(
+  ctx: ErpProcessContext,
+  event: ErpEvent,
+  contactId: string,
+  branch: string | null,
+): Promise<string | null> {
+  if (event.type !== 'order.delivered') return null;
+  if (!ctx.reviewUrl) return null;
+
+  const orderKey = reviewOrderKey(event.data);
+  if (!orderKey) return null;
+
+  const dueAt = await enqueueReviewRequest(ctx.db, {
+    accountId: ctx.accountId,
+    contactId,
+    orderKey,
+    branch,
+    delayDays: ctx.reviewDelayDays,
+  });
+  return dueAt ? dueAt.toISOString().slice(0, 10) : null;
+}
+
+/**
+ * The structured send params for a plan, or undefined when the plan
+ * needs none.
+ *
+ * `review_request` puts the review link on its URL button rather than
+ * in the body, so the link is a button param, not a body param. Index
+ * 0 is that template's only button.
+ */
+export function buildSendParams(
+  plan: TemplatePlan,
+  reviewUrl?: string | null,
+): Record<string, unknown> | undefined {
+  const params: Record<string, unknown> = {};
+  if (plan.documentUrl) {
+    params.headerMediaUrl = plan.documentUrl;
+    if (plan.documentFilename) params.headerFilename = plan.documentFilename;
+  }
+  if (plan.templateName === 'review_request' && reviewUrl?.trim()) {
+    params.buttonParams = { 0: reviewUrl.trim() };
+  }
+  return Object.keys(params).length > 0 ? params : undefined;
+}
+
+/**
+ * Turn a filing outcome into the clause appended to the ledger
+ * detail. `null` — the event named no branch at all — is deliberately
+ * silent: most non-order events carry no branch and saying so on
+ * every row would bury the rows that matter.
+ */
+export function storeLinkNote(link: StoreLinkResult | null): string | null {
+  if (!link) return null;
+  if (link.linked) return `filed to ${link.storeName}`;
+  return link.reason;
+}
+
+/**
+ * Join a detail and its filing note into one ledger line.
+ *
+ * `detail` is optional because the send gate's decision carries no
+ * reason when it lets an event through; the note alone is still worth
+ * recording in that case.
+ */
+export function withNote(
+  detail: string | undefined,
+  note: string | null,
+): string | undefined {
+  if (!note) return detail;
+  return detail ? `${detail} | ${note}` : note;
 }

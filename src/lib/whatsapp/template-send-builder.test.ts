@@ -132,6 +132,57 @@ describe('buildSendComponents — header', () => {
     });
   });
 
+  it('labels a document header with headerFilename', () => {
+    // Without it WhatsApp shows the URL's last path segment, which
+    // for a generated PDF is an id, not something a customer can
+    // recognise or search for later.
+    const components = buildSendComponents(
+      row({ header_type: 'document' }),
+      {
+        headerMediaUrl: 'https://erp.example/d/8f2c91',
+        headerFilename: 'Invoice-TH-0001.pdf',
+      },
+    );
+    expect(components[0]).toEqual({
+      type: 'header',
+      parameters: [
+        {
+          type: 'document',
+          document: {
+            link: 'https://erp.example/d/8f2c91',
+            filename: 'Invoice-TH-0001.pdf',
+          },
+        },
+      ],
+    });
+  });
+
+  it('never puts a filename on an image header', () => {
+    // Meta rejects `filename` on image and video media.
+    const components = buildSendComponents(
+      row({ header_type: 'image' }),
+      {
+        headerMediaUrl: 'https://x.com/s.jpg',
+        headerFilename: 'nope.pdf',
+      },
+    );
+    expect(components[0]).toEqual({
+      type: 'header',
+      parameters: [{ type: 'image', image: { link: 'https://x.com/s.jpg' } }],
+    });
+  });
+
+  it('ignores a blank headerFilename rather than sending an empty one', () => {
+    const components = buildSendComponents(
+      row({ header_type: 'document', header_media_url: 'https://x.com/d.pdf' }),
+      { headerFilename: '   ' },
+    );
+    expect(components[0]).toEqual({
+      type: 'header',
+      parameters: [{ type: 'document', document: { link: 'https://x.com/d.pdf' } }],
+    });
+  });
+
   it('uses an explicit headerMediaId override as the media id', () => {
     const components = buildSendComponents(
       row({ header_type: 'image', header_media_url: 'https://x.com/s.jpg' }),

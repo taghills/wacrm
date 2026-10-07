@@ -209,58 +209,146 @@ describe('sanitizeParam', () => {
   });
 });
 
+const PHONE = '+91 76786 88524';
+
+/** Every customer-facing plan needs the branch's number. */
+const opts = { branchPhone: PHONE };
+
 describe('templatePlanFor', () => {
-  it('maps order.created', () => {
-    const plan = templatePlanFor(event('order.created', orderData));
+  it('maps order.created with the full bill and the branch number last', () => {
+    const plan = templatePlanFor(event('order.created', orderData), opts);
     expect(plan?.templateName).toBe('order_confirmation');
-    expect(plan?.params[0]).toBe('Asha Verma');
-    expect(plan?.params[1]).toBe('TH-0001');
-    expect(plan?.params[4]).toBe('5 Oct 2026');
+    expect(plan?.params).toEqual([
+      'Asha Verma',
+      'Shastri Nagar',
+      'TH-0001',
+      expect.stringMatching(/4,500/),
+      expect.stringMatching(/2,000/),
+      expect.stringMatching(/2,500/),
+      '5 Oct 2026',
+      PHONE,
+    ]);
+    // No PDF on this event, so the plain template, with no header.
+    expect(plan?.documentUrl).toBeUndefined();
   });
 
-  it('maps order.ready with the branch', () => {
-    const plan = templatePlanFor(event('order.ready', orderData));
-    expect(plan?.templateName).toBe('order_ready');
-    expect(plan?.params).toHaveLength(4);
-    expect(plan?.params[2]).toBe('Shastri Nagar');
-  });
-
-  it('maps payment.received using the payment amount, not the total', () => {
+  it('switches to the _doc template when the ERP sends a receipt PDF', () => {
+    // Meta fixes a template's shape at approval, so the attachment
+    // case is a different approved template, not a flag on this one.
     const plan = templatePlanFor(
-      event('payment.received', { ...orderData, payment: { amount: 2000, mode: 'UPI' } }),
+      event('order.created', {
+        ...orderData,
+        receiptPdf: 'https://erp.taghills.com/r/TH-0001.pdf',
+      }),
+      opts,
     );
-    expect(plan?.templateName).toBe('payment_receipt');
-    expect(plan?.params[1]).toMatch(/2,000/);
-    expect(plan?.params[3]).toMatch(/2,500/);
+    expect(plan?.templateName).toBe('order_confirmation_doc');
+    expect(plan?.documentUrl).toBe('https://erp.taghills.com/r/TH-0001.pdf');
+    expect(plan?.documentFilename).toBe('Receipt-TH-0001.pdf');
   });
 
-  it('maps order.delivered only when a review link is configured', () => {
-    expect(templatePlanFor(event('order.delivered', orderData))).toBeNull();
-    const plan = templatePlanFor(event('order.delivered', orderData), {
+  it('ignores a non-https PDF link rather than failing at Meta', () => {
+    // Meta's servers fetch the document; an http link fails there,
+    // which is a much worse place to discover it.
+    const plan = templatePlanFor(
+      event('order.created', { ...orderData, receiptPdf: 'http://erp/r.pdf' }),
+      opts,
+    );
+    expect(plan?.templateName).toBe('order_confirmation');
+    expect(plan?.documentUrl).toBeUndefined();
+  });
+
+  it('maps order.ready with the branch and the number', () => {
+    const plan = templatePlanFor(event('order.ready', orderData), opts);
+    expect(plan?.templateName).toBe('order_ready');
+    expect(plan?.params).toEqual([
+      'Asha Verma',
+      'TH-0001',
+      'Shastri Nagar',
+      expect.stringMatching(/2,500/),
+      PHONE,
+    ]);
+  });
+
+  it('maps order.delivered, attaching the invoice when there is one', () => {
+    const plain = templatePlanFor(event('order.delivered', orderData), opts);
+    expect(plain?.templateName).toBe('order_delivered');
+    expect(plain?.params).toEqual([
+      'Asha Verma',
+      'TH-0001',
+      'Shastri Nagar',
+      PHONE,
+    ]);
+
+    const withPdf = templatePlanFor(
+      event('order.delivered', {
+        ...orderData,
+        invoicePdf: 'https://erp.taghills.com/i/TH-0001.pdf',
+      }),
+      opts,
+    );
+    expect(withPdf?.templateName).toBe('order_delivered_invoice');
+    expect(withPdf?.documentFilename).toBe('Invoice-TH-0001.pdf');
+  });
+
+  it('maps order.review only when a review link is configured', () => {
+    expect(templatePlanFor(event('order.review', orderData), opts)).toBeNull();
+    const plan = templatePlanFor(event('order.review', orderData), {
+      ...opts,
       reviewUrl: 'https://g.page/r/review',
     });
+    // The link rides on the template's URL button, not the body.
     expect(plan).toEqual({
-      templateName: 'thank_you_feedback',
-      params: ['Asha Verma', 'https://g.page/r/review'],
+      templateName: 'review_request',
+      params: ['Asha Verma', 'Shastri Nagar', PHONE],
     });
   });
 
-  it('maps the two marketing events', () => {
+  it('maps the eye-test recall', () => {
     expect(
-      templatePlanFor(event('customer.birthday', { name: 'Asha', phone: '91999' })),
-    ).toEqual({ templateName: 'birthday_wish', params: ['Asha'] });
+      templatePlanFor(
+        event('customer.recall', { ...orderData, recallDate: '2026-10-02' }),
+        opts,
+      ),
+    ).toEqual({
+      templateName: 'eye_test_recall',
+      params: ['Asha Verma', 'Shastri Nagar', PHONE],
+    });
+  });
+
+  it('sends nothing for the two templates nobody has written yet', () => {
+    // payment_receipt and birthday_wish were never submitted for
+    // approval. Mapping them would mean naming a template Meta does
+    // not have, which fails at the API.
     expect(
-      templatePlanFor(event('customer.recall', { ...orderData, recallDate: '2026-10-02' })),
-    ).toEqual({ templateName: 'eye_test_recall', params: ['Asha Verma', 'Shastri Nagar'] });
+      templatePlanFor(
+        event('payment.received', { ...orderData, payment: { amount: 2000 } }),
+        opts,
+      ),
+    ).toBeNull();
+    expect(
+      templatePlanFor(event('customer.birthday', { name: 'Asha', phone: '91999' }), opts),
+    ).toBeNull();
+  });
+
+  it('refuses to build a plan when the branch has no phone number', () => {
+    // Meta rejects an empty parameter, and "call us on " is worse
+    // than no message. The caller turns this into a reason naming
+    // the store that needs a number.
+    expect(templatePlanFor(event('order.created', orderData))).toBeNull();
+    expect(
+      templatePlanFor(event('order.created', orderData), { branchPhone: '   ' }),
+    ).toBeNull();
   });
 
   it('sends nothing for ping and customer.upsert', () => {
+    // These two never needed a phone number either.
     expect(templatePlanFor(event('ping', {}))).toBeNull();
     expect(templatePlanFor(event('customer.upsert', orderData.customer))).toBeNull();
   });
 
   it('falls back to a greeting when the customer has no name', () => {
-    const plan = templatePlanFor(event('customer.birthday', { phone: '91999' }));
+    const plan = templatePlanFor(event('order.ready', { ...orderData, customer: { phone: '91999' } }), opts);
     expect(plan?.params[0]).toBe('there');
   });
 });

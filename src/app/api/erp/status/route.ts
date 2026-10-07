@@ -29,12 +29,118 @@ import { NextResponse } from 'next/server';
 
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { maskEmail } from '@/lib/erp/mask-email';
-import { resolveErpAccountId } from '@/lib/erp/process';
+import { resolveErpAccountId, UNMATCHED_BRANCH } from '@/lib/erp/process';
 import { parseAllowedBranches } from '@/lib/erp/send-gate';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 
 /** How many ledger rows to return. Newest first. */
 const RECENT_LIMIT = 50;
+
+/**
+ * How far back to look for branches that matched no store.
+ *
+ * Deliberately much wider than RECENT_LIMIT: a misnamed branch shows
+ * up once per order and can be drowned out of the last 50 rows by a
+ * busy branch that is working fine, which is exactly the case this
+ * is meant to catch.
+ */
+const UNMATCHED_SCAN_LIMIT = 500;
+
+/**
+ * The review requests that are queued, sent or skipped.
+ *
+ * A delayed message is the easiest kind to lose: it is owed days
+ * from now, so nobody notices on the day it should have gone out.
+ * `nextDue` is the number to watch — a row due in the past means the
+ * scheduled job is not running, which on this deployment is the
+ * normal failure, since nothing in the app schedules itself.
+ */
+async function reviewQueueSummary(
+  admin: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+): Promise<Record<string, unknown>> {
+  const byStatus: Record<string, number> = {};
+  for (const status of ['pending', 'sending', 'sent', 'skipped', 'failed']) {
+    const { count } = await admin
+      .from('erp_review_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', accountId)
+      .eq('status', status);
+    byStatus[status] = count ?? 0;
+  }
+
+  const { data: next } = await admin
+    .from('erp_review_queue')
+    .select('due_at')
+    .eq('account_id', accountId)
+    .eq('status', 'pending')
+    .order('due_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const nextDue = (next?.due_at as string | undefined) ?? null;
+
+  return {
+    byStatus,
+    nextDue,
+    /**
+     * True when something has been due for over a day and is still
+     * pending — the signal that nothing is calling the review cron.
+     */
+    overdue: nextDue
+      ? Date.now() - new Date(nextDue).getTime() > 24 * 60 * 60 * 1000
+      : false,
+    /** Whether the cron can run at all. 503 until this is set. */
+    cronConfigured: Boolean(process.env.AUTOMATION_CRON_SECRET),
+  };
+}
+
+/**
+ * ERP branch names that answer to no CRM store, newest first.
+ *
+ * The CRM links a customer to a store by matching the ERP's branch
+ * text against each active store's name and code (see
+ * `linkContactToBranch`). When nothing matches, the customer is
+ * created and the message still goes out — they are simply filed
+ * nowhere, which means branch staff never see them. That used to be
+ * a line on stderr, invisible to anyone running this on managed
+ * hosting.
+ *
+ * Each entry here is a store waiting to be created or renamed, and
+ * the fix is a one-word edit in Settings -> Stores. An empty list is
+ * the healthy state.
+ */
+async function unmatchedBranches(
+  admin: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+): Promise<Array<Record<string, unknown>>> {
+  const { data } = await admin
+    .from('erp_events')
+    .select('detail, received_at')
+    .eq('account_id', accountId)
+    .like('detail', `%${UNMATCHED_BRANCH}%`)
+    .order('received_at', { ascending: false })
+    .limit(UNMATCHED_SCAN_LIMIT);
+
+  // Keyed by branch name so one bad name reads as one problem,
+  // however many orders it has been attached to.
+  const seen = new Map<string, { branch: string; events: number; lastSeen: unknown }>();
+  for (const row of data ?? []) {
+    const detail = String(row.detail ?? '');
+    const at = detail.indexOf(UNMATCHED_BRANCH);
+    if (at === -1) continue;
+    const branch = detail
+      .slice(at + UNMATCHED_BRANCH.length)
+      .replace(/ \(no active stores\)$/, '')
+      .trim();
+    if (!branch) continue;
+    const prior = seen.get(branch);
+    if (prior) prior.events += 1;
+    // Rows arrive newest first, so the first sighting is the latest.
+    else seen.set(branch, { branch, events: 1, lastSeen: row.received_at });
+  }
+  return [...seen.values()];
+}
 
 /**
  * How many contacts are linked to each store, and where those links
@@ -195,7 +301,13 @@ export async function GET() {
         ERP_API_KEY: Boolean(process.env.ERP_API_KEY),
         ERP_SHARED_SECRET: Boolean(process.env.ERP_SHARED_SECRET),
         ERP_ACCOUNT_ID: Boolean(process.env.ERP_ACCOUNT_ID?.trim()),
+        /**
+         * The legacy home of the review link. Settings -> Automatic
+         * messages wins over it now; this only says whether the old
+         * variable is still set, not whether a link is in use.
+         */
         REVIEW_LINK_URL: Boolean(process.env.REVIEW_LINK_URL?.trim()),
+        AUTOMATION_CRON_SECRET: Boolean(process.env.AUTOMATION_CRON_SECRET),
         /**
          * Shown as the VALUE, not a boolean. The whole point of the
          * gate is knowing exactly which branches are live, and
@@ -228,6 +340,18 @@ export async function GET() {
        * on this page once contacts are arriving.
        */
       storeLinks: await storeLinkSummary(admin, ledgerAccountId),
+      /**
+       * Non-empty means the ERP is naming branches this CRM has no
+       * store for, and those customers are arriving unfiled. Fix by
+       * creating or renaming the store so its name or code matches
+       * the branch text shown here.
+       */
+      unmatchedBranches: await unmatchedBranches(admin, ledgerAccountId),
+      /**
+       * The delayed review requests. `overdue: true` or
+       * `cronConfigured: false` both mean nothing is sending them.
+       */
+      reviewQueue: await reviewQueueSummary(admin, ledgerAccountId),
       /**
        * What is in each account. This exists because "the ERP wrote
        * to a different account" is only half an answer — the other

@@ -41,17 +41,81 @@ event will deliver:
 
 | Event | Template | Body variables, in order |
 |---|---|---|
-| `order.created` | `order_confirmation` | name, bill no, total, balance, delivery date |
-| `order.ready` | `order_ready` | name, bill no, branch, balance |
-| `order.delivered` | `thank_you_feedback` | name, review link |
-| `payment.received` | `payment_receipt` | name, amount paid, bill no, balance |
-| `customer.birthday` | `birthday_wish` | name |
-| `customer.recall` | `eye_test_recall` | name, branch |
+| `order.created` | `order_confirmation` | name, branch, bill no, total, paid, balance, delivery date, branch phone |
+| `order.created` + PDF | `order_confirmation_doc` | the same eight, plus a receipt PDF header |
+| `order.ready` | `order_ready` | name, bill no, branch, balance, branch phone |
+| `order.delivered` | `order_delivered` | name, bill no, branch, branch phone |
+| `order.delivered` + PDF | `order_delivered_invoice` | the same four, plus an invoice PDF header |
+| `order.review` | `review_request` | name, branch, branch phone (review link on the button) |
+| `customer.recall` | `eye_test_recall` | name, branch, branch phone |
 
-`customer.upsert` and `ping` send nothing. The mapping lives in
-`src/lib/erp/events.ts` — that table is the editorial surface, and
-changing a template name or a variable order there is how you change
-what customers receive.
+`customer.upsert` and `ping` send nothing. `payment.received` and
+`customer.birthday` are **deliberately unmapped**: no template was ever
+written or approved for them, and naming a template Meta does not have
+fails at the API. They record "no template mapped" until someone writes
+them.
+
+The mapping lives in `src/lib/erp/events.ts` — that table is the
+editorial surface, and changing a template name or a variable order
+there is how you change what customers receive.
+
+#### Why two templates per PDF
+
+Meta fixes a template's shape at approval. A template approved **with**
+a document header must carry a document on every send; one approved
+**without** can never gain one. So "attach the receipt when the ERP
+gives us a link" is two approved templates with identical wording, and
+the plan picks between them per order. The ERP supplies the link as
+`receiptPdf` on `order.created` and `invoicePdf` on `order.delivered`;
+both are optional, and a non-`https` link is ignored rather than sent,
+because Meta's servers fetch the file and an `http` failure surfaces
+there instead of here.
+
+#### The review request's delay
+
+`order.delivered` arrives the moment an order is handed over, but the
+review request should not go out then. So delivery queues a row in
+`erp_review_queue` (migration 052), due `review_delay_days` later, and
+`GET /api/erp/review/cron` drains it.
+
+The delay and the review link are per-account settings, edited at
+**Settings → Automatic messages**. The link previously lived in
+`REVIEW_LINK_URL`; that variable is still honoured as a fallback, but a
+value saved in Settings wins.
+
+**Nothing in this app is scheduled.** Point an external scheduler at
+the review cron, with `AUTOMATION_CRON_SECRET` in the `x-cron-secret`
+header — the same secret the automation and flow crons use, so this is
+one more URL rather than one more secret. It returns 503 until that
+variable is set. Once a day is enough, since the delay is measured in
+days. Running it more often is harmless: a row is claimed before it is
+sent, so overlapping runs cannot send twice.
+
+`/api/erp/status` reports the queue under `reviewQueue`. `overdue:
+true` or `cronConfigured: false` both mean nothing is draining it.
+
+The ERP may still send `order.review` itself. If it does for an order
+the CRM already queued, the queued row is marked skipped rather than
+sending a second ask.
+
+The review request is classed as marketing: **STOP** silences it, and
+it is submitted to Meta as MARKETING because a review request is not
+about completing the customer's order. The opt-out is re-checked at
+send time, not only at delivery — the customer had days to change
+their mind.
+
+Everything else the live path checks is re-checked too, for the same
+reason: the send gate, the store's phone number, and whether a review
+link is still configured.
+
+#### Every template names the branch's phone
+
+All six close by naming the serving branch's own contact number, taken
+from `stores.phone` for the store matched to the event's branch. A
+store with no number **cannot send**: the event is skipped with
+`store <name> has no contact number`, because Meta rejects an empty
+parameter and a message reading "call us on " is worse than no message.
+Fill it in at Settings → Stores.
 
 ## Security
 
@@ -146,13 +210,42 @@ customer belongs to — hence `source = 'erp'`.
 Order-shaped events carry a `branch` display name. It is matched against
 each store's **name and short code**, ignoring case, spaces and
 punctuation, so "Shastri Nagar", "shastri nagar" and "SHNR" all reach
-the same store. A branch that matches nothing is logged and ignored: the
+the same store. A branch that matches nothing never fails the event: the
 message still goes out, and the contact stays visible to owner/admin,
 who can assign it by hand from the contact's Stores card.
 
 Keep the store names/codes in Settings → Stores aligned with the ERP's
 branch names. They do not have to match exactly, but they do have to
 match after case and punctuation are stripped.
+
+### When a branch matches no store
+
+Every event records what the filing did, alongside what the send did:
+
+```
+sent order_confirmation | filed to Shastri Nagar
+contact synced | branch matched no store: Demo Store
+```
+
+`/api/erp/status` collects the second kind into **`unmatchedBranches`**,
+newest first, with a count of how many events each one has affected:
+
+```json
+"unmatchedBranches": [
+  { "branch": "Demo Store", "events": 4, "lastSeen": "2026-10-07T…" }
+]
+```
+
+An empty list is the healthy state. A non-empty one names a store to
+create or rename, and the fix is a one-word edit in Settings → Stores —
+after which new events file correctly. Earlier contacts stay unfiled
+until the next event for them, or until an admin assigns them by hand.
+
+This exists because the failure is otherwise invisible: the customer is
+created, the message is delivered, nothing errors, and only the branch's
+staff notice — by never seeing the customer at all. The scan covers the
+last 500 ledger rows rather than the 50 shown under `events`, so one
+busy, healthy branch cannot push a broken one out of view.
 
 ## Consent
 

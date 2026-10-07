@@ -43,6 +43,14 @@ export interface SendTimeParams {
   /** Alternative: send the media by Meta media id (from prior upload). */
   headerMediaId?: string;
   /**
+   * Filename shown on a DOCUMENT header's attachment. Without it
+   * WhatsApp labels the file with the URL's last path segment, which
+   * for a generated PDF is usually an id — "Invoice-TH-0001.pdf"
+   * reads better and is what the customer will search for later.
+   * Ignored for image and video headers, which have no filename.
+   */
+  headerFilename?: string;
+  /**
    * Per-button overrides keyed by the button's index in the
    * template's `buttons` array. Used for URL buttons with a {{1}}
    * suffix and for COPY_CODE buttons whose example you want to
@@ -65,7 +73,10 @@ type MetaSendParameter =
   | { type: 'text'; text: string }
   | { type: 'image'; image: { link?: string; id?: string } }
   | { type: 'video'; video: { link?: string; id?: string } }
-  | { type: 'document'; document: { link?: string; id?: string } }
+  | {
+      type: 'document';
+      document: { link?: string; id?: string; filename?: string };
+    }
   | { type: 'coupon_code'; coupon_code: string }
   | { type: 'payload'; payload: string };
 
@@ -110,7 +121,13 @@ function buildHeaderComponent(
       `${headerType} header requires a media link or id at send time — set header_media_url on the template or pass headerMediaUrl/headerMediaId.`,
     );
   }
-  const mediaPayload: { link?: string; id?: string } = id ? { id } : { link };
+  const mediaPayload: { link?: string; id?: string; filename?: string } = id
+    ? { id }
+    : { link };
+  // Only documents carry a filename; Meta rejects it on image/video.
+  if (headerType === 'document' && params.headerFilename?.trim()) {
+    mediaPayload.filename = params.headerFilename.trim();
+  }
   return {
     type: 'header',
     parameters: [

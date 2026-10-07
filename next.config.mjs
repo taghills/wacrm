@@ -151,25 +151,43 @@ const nextConfig = {
    *   came back 404, the page rendered unstyled. Private/incognito
    *   did nothing because the cache is server-side.
    *
+   * The `public, s-maxage=300, stale-while-revalidate=86400` this
+   * rule used to carry was the wrong lever, and it broke two ways:
+   *
+   *   1. Pages render as raw text. The App Router serves two
+   *      different bodies at the SAME url — the HTML document, and
+   *      the React flight payload a prefetch asks for — told apart
+   *      only by the request's `RSC` header and the response's
+   *      `Vary`. Marked `public`, a prefetch's flight payload is
+   *      cacheable, and an edge that does not split on `Vary` then
+   *      hands that payload to the next browser asking for the
+   *      document. The browser has no HTML to render, so it prints
+   *      the payload: lines of `I[520,[...]]` and `$L16` where the
+   *      dashboard should be.
+   *
+   *   2. One signed-in user's page could be served to another.
+   *      `public` invites a SHARED cache to store the response. Every
+   *      page here is per-account and most are per-user, so a cache
+   *      hit across two visitors is a data leak, not a stale page.
+   *      The note that used to sit here — that Next.js and the auth
+   *      middleware would still mark per-user responses private — was
+   *      wrong: an explicit header from this config is what ships.
+   *
    * Strategy:
    *   - /_next/static/* — leave to Next. Turbopack dev chunks can go
    *     stale if we force immutable caching here; Next already emits
-   *     the correct production headers for hashed assets.
+   *     the correct production headers for hashed assets, and because
+   *     those filenames carry a content hash they are safe to cache
+   *     hard. That — not caching the HTML — is what makes a deploy
+   *     fast.
    *   - /api/*          — no-store. API responses are per-user and
    *     must never be shared across requests at the edge.
-   *   - Everything else — public, brief s-maxage + generous
-   *     stale-while-revalidate. The edge serves instantly from cache
-   *     for the first 5 min, then returns cached content while
-   *     refreshing in the background for up to 24 h. A deploy's
-   *     chunk-hash drift self-heals within ~5 min with no user-
-   *     visible latency.
-   *
-   *   Note: dynamic dashboard routes (/inbox, /contacts, /pipelines,
-   *   /broadcasts, etc.) are server-rendered per request — Next.js
-   *   and Supabase auth already prevent them from being served
-   *   from a shared cache. The s-maxage here is a ceiling; Next.js
-   *   and auth middleware still set `private` / `no-store` for
-   *   per-user responses.
+   *   - Everything else — `private, no-store`. A document or flight
+   *     payload is never stored by a shared cache, which fixes the
+   *     year-old-HTML problem this rule was written for far more
+   *     directly than a short s-maxage did: there is no stale HTML to
+   *     serve, so there are no missing chunk hashes to 404 on.
+   *     `Vary` goes out too, for any cache that does honour it.
    *
    * Security headers are appended via a separate catch-all rule
    * below — Next.js merges headers from every matching rule, so
@@ -187,8 +205,14 @@ const nextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value:
-              "public, max-age=0, s-maxage=300, stale-while-revalidate=86400",
+            value: "private, no-store, max-age=0, must-revalidate",
+          },
+          {
+            // Defence in depth: `no-store` already forbids storing
+            // the response, but a cache that ignores it should at
+            // least not confuse a flight payload for a document.
+            key: "Vary",
+            value: "RSC, Next-Router-Prefetch, Next-Router-State-Tree, Next-Url",
           },
         ],
       },

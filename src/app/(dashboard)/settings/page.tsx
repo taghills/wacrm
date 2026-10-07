@@ -17,6 +17,7 @@ import { QuickRepliesManager } from '@/components/settings/quick-replies-manager
 import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
 import { DealsSettings } from '@/components/settings/deals-settings';
 import { MembersTab } from '@/components/settings/members-tab';
+import { MessagesPanel } from '@/components/settings/messages-panel';
 import { StoresPanel } from '@/components/settings/stores-panel';
 import { RolesPanel } from '@/components/settings/roles-panel';
 import { useAccess } from '@/hooks/use-access';
@@ -100,6 +101,7 @@ function SettingsPageInner() {
     appearance: <AppearancePanel />,
     whatsapp: <WhatsAppConfig />,
     templates: <TemplateManager />,
+    messages: <MessagesPanel />,
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,
     deals: <DealsSettings />,

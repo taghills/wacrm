@@ -1689,6 +1689,24 @@
       "wabaSubscribed": "A conta do WhatsApp Business está inscrita neste app — os webhooks de entrada podem ser entregues.",
       "wabaNotSubscribed": "A conta do WhatsApp Business não está inscrita neste app, então a Meta não entregará webhooks de entrada. Informe novamente o token de acesso e salve de novo para inscrevê-la."
     },
+    "messages": {
+      "title": "Mensagens automáticas",
+      "description": "Controles das mensagens que o sistema envia sozinho conforme os pedidos avançam.",
+      "reviewUrlLabel": "Link de avaliação do Google",
+      "reviewUrlPlaceholder": "https://g.page/r/…",
+      "reviewUrlHelp": "Para onde o botão «Deixar uma avaliação» leva o cliente. Precisa começar com https://. Deixe vazio para não enviar pedidos de avaliação.",
+      "reviewUrlFromEnv": "Este link vem de uma configuração da hospedagem. Salvar aqui passa a substituí-la.",
+      "reviewUrlUnset": "Nenhum link configurado, então pedidos de avaliação não estão sendo enviados.",
+      "delayLabel": "Pedir avaliação depois de (dias)",
+      "delayHelp": "Dias após a entrega antes de enviar o pedido de avaliação. 0 envia junto com a mensagem de entrega. Máximo {max}.",
+      "save": "Salvar alterações",
+      "saved": "Configurações salvas",
+      "saveError": "Não foi possível salvar as configurações",
+      "loadError": "Não foi possível carregar as configurações",
+      "urlInvalid": "O link de avaliação precisa começar com https://",
+      "delayInvalid": "Informe um número inteiro de dias de 0 a {max}",
+      "scheduleNote": "Os pedidos de avaliação são enviados por uma tarefa agendada. Se nada estiver agendado nesta instalação, eles ficam na fila e nada é enviado."
+    },
     "stores": {
       "edit": "Editar",
       "editStore": "Editar loja",

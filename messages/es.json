@@ -1689,6 +1689,24 @@
       "wabaSubscribed": "La cuenta de WhatsApp Business está suscrita a esta app: los webhooks entrantes pueden entregarse.",
       "wabaNotSubscribed": "La cuenta de WhatsApp Business no está suscrita a esta app, así que Meta no entregará webhooks entrantes. Vuelve a ingresar el token de acceso y guarda de nuevo para suscribirla."
     },
+    "messages": {
+      "title": "Mensajes automáticos",
+      "description": "Controles de los mensajes que el sistema envía por su cuenta según avanzan los pedidos.",
+      "reviewUrlLabel": "Enlace de reseña de Google",
+      "reviewUrlPlaceholder": "https://g.page/r/…",
+      "reviewUrlHelp": "A dónde lleva al cliente el botón «Dejar una reseña». Debe empezar por https://. Déjalo vacío para no enviar solicitudes de reseña.",
+      "reviewUrlFromEnv": "Este enlace proviene ahora de una configuración del hosting. Al guardar aquí, se sustituye.",
+      "reviewUrlUnset": "No hay enlace configurado, así que no se envían solicitudes de reseña.",
+      "delayLabel": "Pedir reseña después de (días)",
+      "delayHelp": "Días tras la entrega antes de enviar la solicitud de reseña. 0 la envía con el mensaje de entrega. Máximo {max}.",
+      "save": "Guardar cambios",
+      "saved": "Ajustes guardados",
+      "saveError": "No se pudieron guardar los ajustes",
+      "loadError": "No se pudieron cargar los ajustes",
+      "urlInvalid": "El enlace de reseña debe empezar por https://",
+      "delayInvalid": "Introduce un número entero de días de 0 a {max}",
+      "scheduleNote": "Las solicitudes de reseña las envía una tarea programada. Si no hay nada programado en esta instalación, quedan en cola y no se envía nada."
+    },
     "stores": {
       "edit": "Editar",
       "editStore": "Editar tienda",
