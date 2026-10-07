@@ -34,6 +34,7 @@ import {
   extractCustomer,
   isKnownEventType,
   isMarketingEvent,
+  plainTemplateFor,
   requiresBranchPhone,
   templatePlanFor,
   type ErpCustomer,
@@ -612,6 +613,13 @@ export async function processErpEvent(
     };
   }
 
+  // An attachment variant that Meta has not approved cannot send. The
+  // ERP now puts a receipt link on every order, so without this every
+  // order would pick the _doc template and fail — the plain version
+  // would never be reached, which is the opposite of the graceful
+  // degradation this pair was designed for.
+  const usable = await downgradeToApprovedTemplate(ctx, plan);
+
   const { conversationId } = await resolveConversationByPhone(
     ctx.db,
     ctx.accountId,
@@ -623,14 +631,14 @@ export async function processErpEvent(
     await sendMessageToConversation(ctx.db, ctx.accountId, {
       conversationId,
       messageType: 'template',
-      templateName: plan.templateName,
-      templateParams: plan.params,
+      templateName: usable.templateName,
+      templateParams: usable.params,
       // The structured form is what carries a DOCUMENT header and a URL
       // button through to Meta; `templateParams` alone reaches the body
       // only. Passed only when there is something to put in it, so the
       // plain templates keep the simpler, well-tested path.
         templateMessageParams: buildSendParams(
-        plan,
+        usable,
         link?.linked ? link.storeId : null,
       ),
     });
@@ -640,7 +648,7 @@ export async function processErpEvent(
     // the same string whichever template was tried. That left the
     // ledger unable to answer the question a failed send most often
     // raises — WHICH message was this, and did it carry its PDF.
-    throw new Error(sendFailureDetail(plan, err));
+    throw new Error(sendFailureDetail(usable, err));
   }
 
   // A delivery owes a review request, a few days from now. Queued
@@ -648,12 +656,17 @@ export async function processErpEvent(
   // review ask behind for an order the customer never heard about.
   const queued = await queueReviewIfDelivered(ctx, event, contact.id, branch);
 
+  const downgraded =
+    usable.templateName !== plan.templateName
+      ? ` (${plan.templateName} is not approved, so no attachment)`
+      : '';
+
   return {
     status: 'done',
     detail: withNote(
       queued
-        ? `sent ${plan.templateName} | review request due ${queued}`
-        : `sent ${plan.templateName}`,
+        ? `sent ${usable.templateName}${downgraded} | review request due ${queued}`
+        : `sent ${usable.templateName}${downgraded}`,
       note,
     ),
     contactId: contact.id,
@@ -691,6 +704,43 @@ async function queueReviewIfDelivered(
     delayDays: ctx.reviewDelayDays,
   });
   return dueAt ? dueAt.toISOString().slice(0, 10) : null;
+}
+
+/**
+ * Swap an attachment template for its plain twin when Meta has not
+ * approved the attachment one.
+ *
+ * Checked against the CRM's own template list, which mirrors Meta's
+ * status. A template that is missing or not APPROVED cannot send, and
+ * failing the whole message over an attachment the customer never
+ * asked for is the wrong trade: the confirmation matters, the PDF is
+ * a bonus.
+ *
+ * Returns the plan unchanged when there is no attachment, no plain
+ * twin, or the variant is approved.
+ */
+export async function downgradeToApprovedTemplate(
+  ctx: ErpProcessContext,
+  plan: TemplatePlan,
+): Promise<TemplatePlan> {
+  if (!plan.documentUrl) return plan;
+  const plain = plainTemplateFor(plan.templateName);
+  if (!plain) return plan;
+
+  const { data } = await ctx.db
+    .from('message_templates')
+    .select('status')
+    .eq('account_id', ctx.accountId)
+    .eq('name', plan.templateName);
+
+  const approved = (data ?? []).some(
+    (row) => String((row as { status?: unknown }).status ?? '').toUpperCase() === 'APPROVED',
+  );
+  if (approved) return plan;
+
+  // Same body params either way — the two templates differ only in the
+  // header, which is why they can stand in for each other at all.
+  return { templateName: plain, params: plan.params };
 }
 
 /**

@@ -236,6 +236,22 @@ export function formatDate(value: unknown): string {
  * resulting 400 would look like "the template is broken" rather than
  * "this one customer's name has a line break in it".
  */
+/**
+ * A template parameter that is never empty.
+ *
+ * Meta rejects an empty text parameter with "(#131008) Required
+ * parameter is missing" — it does not distinguish a blank value from
+ * an absent one. A live demo order failed exactly this way: the order
+ * had no expected delivery date, `formatDate` correctly returned '',
+ * and the whole message was refused over one missing field.
+ *
+ * Every parameter now carries a fallback, so a gap in the ERP's data
+ * costs the customer one vague line rather than the entire message.
+ */
+export function orFallback(value: string, fallback: string): string {
+  return value.trim() ? value : fallback;
+}
+
 export function sanitizeParam(value: unknown): string {
   const text = value === null || value === undefined ? '' : String(value);
   return text.replace(/[\r\n\t]+/g, ' ').replace(/ {4,}/g, '   ').trim();
@@ -376,12 +392,14 @@ export function templatePlanFor(
     case 'order.created': {
       const params = [
         name,
-        branch,
-        billNo,
+        orFallback(branch, 'TAGHills'),
+        orFallback(billNo, '-'),
         formatMoney(data.grandTotal, currency),
         formatMoney(data.paid, currency),
         formatMoney(data.balance, currency),
-        sanitizeParam(formatDate(data.deliveryDate)),
+        // An order without a promised date is normal; refusing to send
+        // the confirmation over it is not.
+        orFallback(sanitizeParam(formatDate(data.deliveryDate)), 'To be confirmed'),
         phone,
       ];
       // Two approved templates, identical wording, differing only in
@@ -401,15 +419,20 @@ export function templatePlanFor(
         templateName: 'order_ready',
         params: [
           name,
-          billNo,
-          branch,
+          orFallback(billNo, '-'),
+          orFallback(branch, 'TAGHills'),
           formatMoney(data.balance, currency),
           phone,
         ],
       };
 
     case 'order.delivered': {
-      const params = [name, billNo, branch, phone];
+      const params = [
+        name,
+        orFallback(billNo, '-'),
+        orFallback(branch, 'TAGHills'),
+        phone,
+      ];
       return pdf
         ? {
             templateName: 'order_delivered_invoice',
@@ -428,14 +451,14 @@ export function templatePlanFor(
       // buttonParams.
       return {
         templateName: 'review_request',
-        params: [name, branch, phone],
+        params: [name, orFallback(branch, 'TAGHills'), phone],
       };
     }
 
     case 'customer.recall':
       return {
         templateName: 'eye_test_recall',
-        params: [name, branch, phone],
+        params: [name, orFallback(branch, 'TAGHills'), phone],
       };
 
     /**
@@ -452,6 +475,18 @@ export function templatePlanFor(
     default:
       return null;
   }
+}
+
+/**
+ * The plain template that carries the same wording as an attachment
+ * variant, for when the variant is not approved yet.
+ *
+ * Returns null for a template that has no plain twin.
+ */
+export function plainTemplateFor(templateName: string): string | null {
+  if (templateName === 'order_confirmation_doc') return 'order_confirmation';
+  if (templateName === 'order_delivered_invoice') return 'order_delivered';
+  return null;
 }
 
 /** `Receipt-TH-0001.pdf`, or a generic name when there is no bill no. */

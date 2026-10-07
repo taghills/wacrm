@@ -525,6 +525,10 @@ export async function sendTemplateMessage(
       headerText: messageParams?.headerText,
       headerMediaUrl: messageParams?.headerMediaUrl,
       headerMediaId: messageParams?.headerMediaId,
+      // Was missing here, so a DOCUMENT header's filename never
+      // reached the builder and the attachment arrived labelled with
+      // the URL's last path segment.
+      headerFilename: messageParams?.headerFilename,
       buttonParams: messageParams?.buttonParams,
     })
     if (components.length > 0) {
