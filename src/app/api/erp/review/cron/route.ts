@@ -237,7 +237,12 @@ async function sendOneReview(
     messageType: 'template',
     templateName: plan.templateName,
     templateParams: plan.params,
-    templateMessageParams: buildSendParams(plan, reviewUrl),
+    // The button carries the store id; /r/<id> resolves it to this
+    // branch's Google listing at tap time.
+    templateMessageParams: buildSendParams(
+      plan,
+      link?.linked ? link.storeId : null,
+    ),
   });
 
   return { status: 'sent', detail: `sent ${plan.templateName}` };

@@ -100,6 +100,8 @@ export const UNMATCHED_BRANCH = 'branch matched no store: ';
 export type StoreLinkResult =
   | {
       linked: true;
+      /** The store's id, used as the review button's URL suffix. */
+      storeId: string;
       storeName: string;
       storeCode: string;
       /** The store's own contact number, or null if nobody set one. */
@@ -478,6 +480,7 @@ export async function linkContactToBranch(
   }
   return {
     linked: true,
+    storeId: String(match.id),
     storeName: String(match.name),
     storeCode: String(match.code),
     storePhone: typeof match.phone === 'string' && match.phone.trim()
@@ -626,7 +629,10 @@ export async function processErpEvent(
       // button through to Meta; `templateParams` alone reaches the body
       // only. Passed only when there is something to put in it, so the
       // plain templates keep the simpler, well-tested path.
-      templateMessageParams: buildSendParams(plan, ctx.reviewUrl),
+        templateMessageParams: buildSendParams(
+        plan,
+        link?.linked ? link.storeId : null,
+      ),
     });
   } catch (err) {
     // Meta's own errors name neither the template nor the attachment:
@@ -716,15 +722,20 @@ export function sendFailureDetail(plan: TemplatePlan, err: unknown): string {
  */
 export function buildSendParams(
   plan: TemplatePlan,
-  reviewUrl?: string | null,
+  reviewStoreId?: string | null,
 ): Record<string, unknown> | undefined {
   const params: Record<string, unknown> = {};
   if (plan.documentUrl) {
     params.headerMediaUrl = plan.documentUrl;
     if (plan.documentFilename) params.headerFilename = plan.documentFilename;
   }
-  if (plan.templateName === 'review_request' && reviewUrl?.trim()) {
-    params.buttonParams = { 0: reviewUrl.trim() };
+  // The review button's URL is `https://<host>/r/{{1}}`, and this is
+  // the {{1}}. Meta allows one variable on a URL button and only as a
+  // suffix on a fixed base, so the branch's own Google link cannot go
+  // here — four shops have four unrelated links and there is no fixed
+  // base to hang them off. /r/<store id> resolves it instead.
+  if (plan.templateName === 'review_request' && reviewStoreId?.trim()) {
+    params.buttonParams = { 0: reviewStoreId.trim() };
   }
   return Object.keys(params).length > 0 ? params : undefined;
 }

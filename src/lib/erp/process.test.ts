@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildSendParams,
   normalizeStoreKey,
   sendFailureDetail,
   storeLinkNote,
@@ -24,6 +25,7 @@ describe('storeLinkNote', () => {
     expect(
       storeLinkNote({
         linked: true,
+        storeId: '11111111-2222-3333-4444-555555555555',
         storeName: 'Demo',
         storeCode: 'DEMO',
         storePhone: '+91 76786 88524',
@@ -172,5 +174,51 @@ describe('sendFailureDetail', () => {
     expect(
       sendFailureDetail({ templateName: 'order_ready', params: [] }, 'socket hang up'),
     ).toBe('sending order_ready failed: socket hang up');
+  });
+});
+
+describe('buildSendParams', () => {
+  const STORE_ID = '11111111-2222-3333-4444-555555555555';
+
+  it('puts the store id on the review button, not the link', () => {
+    // Meta allows one variable on a URL button and only as a suffix
+    // on a fixed base. Four branches have four unrelated Google
+    // links, so the link itself cannot go here — the button points
+    // at /r/{{1}} and this is the {{1}}.
+    expect(
+      buildSendParams({ templateName: 'review_request', params: [] }, STORE_ID),
+    ).toEqual({ buttonParams: { 0: STORE_ID } });
+  });
+
+  it('leaves the button alone when there is no store', () => {
+    expect(
+      buildSendParams({ templateName: 'review_request', params: [] }, null),
+    ).toBeUndefined();
+    expect(
+      buildSendParams({ templateName: 'review_request', params: [] }, '  '),
+    ).toBeUndefined();
+  });
+
+  it('carries a document header and its filename', () => {
+    expect(
+      buildSendParams(
+        {
+          templateName: 'order_confirmation_doc',
+          params: [],
+          documentUrl: 'https://erp.example/d/abc',
+          documentFilename: 'Receipt-TH-0001.pdf',
+        },
+        null,
+      ),
+    ).toEqual({
+      headerMediaUrl: 'https://erp.example/d/abc',
+      headerFilename: 'Receipt-TH-0001.pdf',
+    });
+  });
+
+  it('is undefined for a plain template, keeping the simpler send path', () => {
+    expect(
+      buildSendParams({ templateName: 'order_ready', params: [] }, STORE_ID),
+    ).toBeUndefined();
   });
 });
