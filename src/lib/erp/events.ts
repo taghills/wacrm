@@ -312,15 +312,25 @@ export function requiresBranchPhone(type: string): boolean {
   return type !== 'ping' && type !== 'customer.upsert';
 }
 
+/** Which document the ERP's link actually points at. */
+export type ErpDocumentKind = 'receipt' | 'invoice';
+
+/** A PDF the ERP attached, and what it is. */
+export interface ErpDocument {
+  url: string;
+  kind: ErpDocumentKind;
+}
+
 /**
- * The PDF the ERP attached to this event, if any.
+ * The PDF the ERP attached to this event, if any, and which of the
+ * two documents it is.
  *
  * `receiptPdf` rides on `order.created`, `invoicePdf` on
  * `order.delivered`. Both are optional: the ERP did not have them
  * when this integration was first built, and an order whose PDF is
  * still rendering must not hold up its confirmation message.
  */
-export function extractDocumentUrl(event: ErpEvent): string | null {
+export function extractDocument(event: ErpEvent): ErpDocument | null {
   const data = event.data;
 
   // Picked by EVENT TYPE, not by whichever field happens to be
@@ -329,14 +339,22 @@ export function extractDocumentUrl(event: ErpEvent): string | null {
   // sending `invoicePdf: ""` beside a perfectly good `receiptPdf`
   // would take the empty string and silently send no attachment —
   // indistinguishable from the ERP sending no link at all.
-  const primary = event.type === 'order.delivered'
-    ? data.invoicePdf
-    : data.receiptPdf;
-  const secondary = event.type === 'order.delivered'
-    ? data.receiptPdf
-    : data.invoicePdf;
+  const preferInvoice = event.type === 'order.delivered';
+  const primary = preferInvoice ? data.invoicePdf : data.receiptPdf;
+  const secondary = preferInvoice ? data.receiptPdf : data.invoicePdf;
 
-  return httpsUrl(primary) ?? httpsUrl(secondary);
+  // The KIND travels with the url, and is not re-derived from the
+  // event type further down. When the preferred field is empty the
+  // fallback is the OTHER document, so naming the file after the
+  // event handed the customer an invoice called `Receipt-TH-0001.pdf`
+  // — a file whose name contradicts its contents, which is worse
+  // than no attachment and impossible to tell apart from the ERP
+  // having sent the wrong link.
+  const first = httpsUrl(primary);
+  if (first) return { url: first, kind: preferInvoice ? 'invoice' : 'receipt' };
+  const second = httpsUrl(secondary);
+  if (second) return { url: second, kind: preferInvoice ? 'receipt' : 'invoice' };
+  return null;
 }
 
 /**
@@ -386,7 +404,7 @@ export function templatePlanFor(
   // a reason naming the store that needs a number.
   if (requiresBranchPhone(event.type) && !phone) return null;
 
-  const pdf = extractDocumentUrl(event);
+  const pdf = extractDocument(event);
 
   switch (event.type) {
     case 'order.created': {
@@ -408,8 +426,8 @@ export function templatePlanFor(
         ? {
             templateName: 'order_confirmation_doc',
             params,
-            documentUrl: pdf,
-            documentFilename: receiptFilename(data.billNo),
+            documentUrl: pdf.url,
+            documentFilename: documentFilename(pdf.kind, data.billNo),
           }
         : { templateName: 'order_confirmation', params };
     }
@@ -437,8 +455,8 @@ export function templatePlanFor(
         ? {
             templateName: 'order_delivered_invoice',
             params,
-            documentUrl: pdf,
-            documentFilename: invoiceFilename(data.billNo),
+            documentUrl: pdf.url,
+            documentFilename: documentFilename(pdf.kind, data.billNo),
           }
         : { templateName: 'order_delivered', params };
     }
@@ -489,14 +507,15 @@ export function plainTemplateFor(templateName: string): string | null {
   return null;
 }
 
-/** `Receipt-TH-0001.pdf`, or a generic name when there is no bill no. */
-function receiptFilename(billNo: unknown): string {
+/**
+ * `Receipt-TH-0001.pdf` / `Invoice-TH-0001.pdf`, or a generic name
+ * when the order carries no bill number.
+ *
+ * Named from the document's own kind, never from the event that
+ * carried it — see `extractDocument`.
+ */
+function documentFilename(kind: ErpDocumentKind, billNo: unknown): string {
+  const label = kind === 'invoice' ? 'Invoice' : 'Receipt';
   const no = typeof billNo === 'string' ? billNo.trim() : '';
-  return no ? `Receipt-${no}.pdf` : 'Receipt.pdf';
-}
-
-/** `Invoice-TH-0001.pdf`, or a generic name when there is no bill no. */
-function invoiceFilename(billNo: unknown): string {
-  const no = typeof billNo === 'string' ? billNo.trim() : '';
-  return no ? `Invoice-${no}.pdf` : 'Invoice.pdf';
+  return no ? `${label}-${no}.pdf` : `${label}.pdf`;
 }

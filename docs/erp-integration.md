@@ -59,6 +59,13 @@ The mapping lives in `src/lib/erp/events.ts` — that table is the
 editorial surface, and changing a template name or a variable order
 there is how you change what customers receive.
 
+The attachment is named after the document, not the event:
+`receiptPdf` becomes `Receipt-TH-0001.pdf` and `invoicePdf` becomes
+`Invoice-TH-0001.pdf`, wherever each arrived. The two fields fall back
+to each other when the preferred one is empty, so naming the file after
+the event handed the customer an invoice called `Receipt-…` — a name
+that contradicts its contents.
+
 #### Why two templates per PDF
 
 Meta fixes a template's shape at approval. A template approved **with**
@@ -99,6 +106,13 @@ The account-wide link in Settings → Automatic messages is the fallback
 for a store that has none yet, which is what lets the links be
 collected one branch at a time. When neither exists the review request
 is skipped, naming the store.
+
+Delivery queues the row **whether or not a link exists yet**. The drain
+is the one place that decides, because it runs days later, against the
+serving branch, by which time a link may well have been filled in.
+Gating the queue on the account-wide link instead dropped every
+delivery at a branch that had its own listing, recorded nothing, and
+left "no review message ever arrived" with no evidence anywhere.
 
 `/api/erp/status` reports `hasPhone` and `hasReviewLink` per store, so
 an unfilled branch is visible before it costs a message. The link previously lived in

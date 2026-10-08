@@ -15,6 +15,7 @@ import {
   buildSendParams,
   downgradeToApprovedTemplate,
   normalizeStoreKey,
+  queueReviewIfDelivered,
   sendFailureDetail,
   storeLinkNote,
   UNMATCHED_BRANCH,
@@ -281,5 +282,96 @@ describe('downgradeToApprovedTemplate', () => {
     const plain = { templateName: 'order_ready', params: ['Asha'] };
     const ctx = { accountId: 'acc-1' } as never; // no db — would throw if used
     expect(await downgradeToApprovedTemplate(ctx, plain)).toBe(plain);
+  });
+});
+
+// ============================================================
+// Queueing the review request.
+//
+// The bug these guard: the queue step gated on `ctx.reviewUrl`, the
+// ACCOUNT-wide fallback, while the link that actually reaches the
+// customer is the serving branch's. With the account field empty —
+// the normal state while the branches' links are collected one shop
+// at a time — every delivery was dropped before a row existed, so
+// nothing was sent, nothing was queued, and nothing anywhere said
+// why.
+// ============================================================
+
+describe('queueReviewIfDelivered', () => {
+  function ctxWith(reviewUrl: string | null) {
+    const upserts: Array<Record<string, unknown>> = [];
+    const db = {
+      from: () => ({
+        // enqueueReviewRequest looks for an existing row first.
+        select: () => ({
+          eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+        }),
+        upsert: async (row: Record<string, unknown>) => {
+          upserts.push(row);
+          return { error: null };
+        },
+      }),
+    };
+    const ctx = {
+      db,
+      accountId: 'acc-1',
+      currency: 'INR',
+      reviewUrl,
+      reviewDelayDays: 3,
+      allowedBranches: [],
+    } as unknown as Parameters<typeof queueReviewIfDelivered>[0];
+    return { ctx, upserts };
+  }
+
+  const DELIVERED = {
+    id: 'evt-1',
+    type: 'order.delivered',
+    data: { billNo: 'TH-0001' },
+  };
+
+  it('queues even when no account-wide link is set', async () => {
+    // The reported failure, in one case: a branch with its own
+    // Google listing got no review request because this field —
+    // which is only the fallback — was blank.
+    const { ctx, upserts } = ctxWith(null);
+    const due = await queueReviewIfDelivered(ctx, DELIVERED, 'contact-1', 'Shastri Nagar');
+    expect(due).not.toBeNull();
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0]).toMatchObject({
+      account_id: 'acc-1',
+      contact_id: 'contact-1',
+      erp_order_key: 'TH-0001',
+      branch: 'Shastri Nagar',
+      status: 'pending',
+    });
+  });
+
+  it('still queues when there is one', async () => {
+    const { ctx, upserts } = ctxWith('https://g.page/r/account');
+    expect(await queueReviewIfDelivered(ctx, DELIVERED, 'contact-1', 'demo')).not.toBeNull();
+    expect(upserts).toHaveLength(1);
+  });
+
+  it('queues nothing for an event that is not a delivery', async () => {
+    const { ctx, upserts } = ctxWith('https://g.page/r/account');
+    const ready = { id: 'evt-2', type: 'order.ready', data: { billNo: 'TH-0001' } };
+    expect(await queueReviewIfDelivered(ctx, ready, 'contact-1', 'demo')).toBeNull();
+    expect(upserts).toHaveLength(0);
+  });
+
+  it('queues nothing for an order with no identifier', async () => {
+    // Without a key every unidentified order in the account would
+    // collide on one queue row, and one customer would be asked for
+    // all of them.
+    const { ctx, upserts } = ctxWith('https://g.page/r/account');
+    const nameless = { id: 'evt-3', type: 'order.delivered', data: {} };
+    expect(await queueReviewIfDelivered(ctx, nameless, 'contact-1', 'demo')).toBeNull();
+    expect(upserts).toHaveLength(0);
+  });
+
+  it('reports the due day for the ledger', async () => {
+    const { ctx } = ctxWith(null);
+    const due = await queueReviewIfDelivered(ctx, DELIVERED, 'contact-1', 'demo');
+    expect(due).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

@@ -43,6 +43,7 @@ import {
 } from './events';
 import {
   enqueueReviewRequest,
+  resolveReviewUrl,
   reviewOrderKey,
   supersedeQueuedReview,
 } from './review-queue';
@@ -595,9 +596,21 @@ export async function processErpEvent(
     if (orderKey) await supersedeQueuedReview(ctx.db, ctx.accountId, orderKey);
   }
 
+  // The branch's own Google listing wins over the account-wide link,
+  // the same precedence the queue drain and /r/<id> already use.
+  // Resolved here rather than read straight off ctx: `ctx.reviewUrl`
+  // is only the ACCOUNT-wide fallback, so gating on it alone skipped
+  // a branch that has its own listing whenever that field sat empty
+  // — the normal state while the links are collected one shop at a
+  // time.
+  const reviewLink = resolveReviewUrl(
+    link?.linked ? link.storeReviewUrl : null,
+    ctx.reviewUrl,
+  );
+
   const plan = templatePlanFor(event, {
     currency: ctx.currency,
-    reviewUrl: ctx.reviewUrl,
+    reviewUrl: reviewLink,
     branchPhone,
   });
   if (!plan) {
@@ -605,7 +618,9 @@ export async function processErpEvent(
       status: 'skipped',
       detail: withNote(
         event.type === 'order.review'
-          ? 'REVIEW_LINK_URL is not set, so there is no review link to send'
+          ? link?.linked
+            ? `no review link for ${link.storeName}, and no account-wide link to fall back on: set one in Settings -> Stores`
+            : 'no review link is configured: set one in Settings -> Stores, or an account-wide one in Settings -> Automatic messages'
           : 'no template mapped for this event',
         note,
       ),
@@ -678,20 +693,26 @@ export async function processErpEvent(
  * it falls due for the ledger.
  *
  * Returns null — and records nothing — when this is not a delivery,
- * when no review link is configured (there would be nothing to put
- * on the button), or when the order carries no identifier we can
- * make unique. That last case is the one worth being strict about:
- * without a key, every unidentified order in the account would
- * collide on one queue row.
+ * or when the order carries no identifier we can make unique. That
+ * second case is worth being strict about: without a key, every
+ * unidentified order in the account would collide on one queue row.
+ *
+ * It deliberately does NOT check for a review link. The link that
+ * matters is the serving branch's, it is read at send time days
+ * later, and it may well be filled in between — so refusing to queue
+ * over a link missing today throws away an ask that would have been
+ * sendable. The drain is the single place that decides, and it
+ * records WHICH store is missing a link somewhere an operator can
+ * read it. Dropping the row here recorded nothing at all, which is
+ * how "no review message ever arrived" became unanswerable.
  */
-async function queueReviewIfDelivered(
+export async function queueReviewIfDelivered(
   ctx: ErpProcessContext,
   event: ErpEvent,
   contactId: string,
   branch: string | null,
 ): Promise<string | null> {
   if (event.type !== 'order.delivered') return null;
-  if (!ctx.reviewUrl) return null;
 
   const orderKey = reviewOrderKey(event.data);
   if (!orderKey) return null;
