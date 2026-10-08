@@ -12,6 +12,7 @@ import {
   validateTemplatePayload,
   type TemplatePayload,
 } from '@/lib/whatsapp/template-validators'
+import { metaErrorText } from '@/lib/whatsapp/meta-error-explain'
 import { buildMetaTemplatePayload } from '@/lib/whatsapp/template-components'
 import { ensureMediaHeaderHandle } from '@/lib/whatsapp/template-header-handle'
 import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
@@ -188,7 +189,10 @@ export async function POST(request: Request) {
         metaTemplateId = meta.id
         metaStatus = meta.status
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Meta submit failed.'
+        // metaErrorText, not e.message: a template rejection arrives as
+        // a bare "Invalid parameter", and the rule that was actually
+        // broken sits in error_user_title / error_user_msg.
+        const message = e instanceof Error ? metaErrorText(e) : 'Meta submit failed.'
         // Persist the failure so the user can retry; row stays DRAFT
         // until they fix and re-submit.
         await upsertTemplateRow(

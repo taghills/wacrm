@@ -34,6 +34,14 @@ interface MetaErrorResponse {
     fbtrace_id?: string
     /** WhatsApp-specific envelope — `details` is the human-readable part. */
     error_data?: { messaging_product?: string; details?: string }
+    /**
+     * Business Management endpoints (template create/edit) put their
+     * real reason here, NOT in `error_data.details`. `message` stays
+     * the generic "Invalid parameter" — these two say which rule was
+     * broken.
+     */
+    error_user_title?: string
+    error_user_msg?: string
   }
 }
 
@@ -55,6 +63,10 @@ export class MetaApiError extends Error {
   readonly httpStatus: number
   /** `error.error_data.details` — WhatsApp endpoints put the useful text here. */
   readonly details: string | null
+  /** `error.error_user_title` — Business Management endpoints' short reason. */
+  readonly userTitle: string | null
+  /** `error.error_user_msg` — Business Management endpoints' full reason. */
+  readonly userMessage: string | null
 
   constructor(
     message: string,
@@ -65,6 +77,8 @@ export class MetaApiError extends Error {
       fbtraceId?: string | null
       httpStatus: number
       details?: string | null
+      userTitle?: string | null
+      userMessage?: string | null
     },
   ) {
     super(message)
@@ -75,6 +89,8 @@ export class MetaApiError extends Error {
     this.fbtraceId = fields.fbtraceId ?? null
     this.httpStatus = fields.httpStatus
     this.details = fields.details ?? null
+    this.userTitle = fields.userTitle ?? null
+    this.userMessage = fields.userMessage ?? null
   }
 }
 
@@ -99,6 +115,8 @@ async function readMetaError(response: Response, fallback: string): Promise<Meta
     fbtraceId: envelope?.fbtrace_id ?? null,
     httpStatus: response.status,
     details: envelope?.error_data?.details ?? null,
+    userTitle: envelope?.error_user_title ?? null,
+    userMessage: envelope?.error_user_msg ?? null,
   })
 }
 

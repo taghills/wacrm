@@ -44,6 +44,8 @@ export interface MetaErrorLike {
   fbtraceId?: string | null
   httpStatus?: number | null
   details?: string | null
+  userTitle?: string | null
+  userMessage?: string | null
 }
 
 export interface MetaErrorExplanation {
@@ -57,7 +59,7 @@ export interface MetaErrorExplanation {
   code: number | null
   subcode: number | null
   fbtraceId: string | null
-  /** Meta's own message (with `error_data.details` appended when present). */
+  /** Meta's own message, with every reason it carried appended. */
   metaMessage: string
 }
 
@@ -82,6 +84,45 @@ const TOKEN_HINT =
 
 const RATE_LIMIT_CODES = new Set([4, 17, 32, 613, 80007, 130429, 131048, 131056])
 const TEMPORARY_CODES = new Set([1, 2, 131000, 133004, 133016])
+
+/**
+ * Everything Meta said about a failure, in one line.
+ *
+ * Meta splits the reason across three places and uses a different one
+ * per endpoint family. The Cloud API puts it in `error_data.details`;
+ * the Business Management API (template create/edit/delete) leaves
+ * `message` as a bare "Invalid parameter" and puts the real reason in
+ * `error_user_title` / `error_user_msg`. Reading only `err.message`
+ * therefore shows the user a sentence that names nothing — which is
+ * how a template submit could fail with no way to tell why.
+ *
+ * The subcode rides along because it is the one durable handle on a
+ * template error: Meta's wording changes, the subcode does not. Callers
+ * whose own output already carries `subcode` as a field (the connect
+ * flow's `metaErrorPayload`) pass `includeSubcode: false` rather than
+ * print it twice.
+ */
+export function metaErrorText(
+  err: unknown,
+  opts: { includeSubcode?: boolean } = {},
+): string {
+  const includeSubcode = opts.includeSubcode ?? true
+  if (!isMetaErrorLike(err)) {
+    return err instanceof Error ? err.message : String(err)
+  }
+  // Deduped: Meta sometimes repeats `message` inside `error_user_msg`,
+  // and a sentence printed twice reads like a bug in our own code.
+  const seen = new Set<string>()
+  const parts: string[] = []
+  for (const part of [err.message, err.userTitle, err.userMessage, err.details]) {
+    const text = part?.trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    parts.push(text)
+  }
+  const line = parts.join(' — ') || 'Meta rejected the request without saying why.'
+  return includeSubcode && err.subcode ? `${line} [subcode ${err.subcode}]` : line
+}
 
 function isMetaErrorLike(err: unknown): err is MetaErrorLike {
   return (
@@ -137,7 +178,7 @@ export function explainMetaError(
   const code = err.code ?? null
   const subcode = err.subcode ?? null
   const fbtraceId = err.fbtraceId ?? null
-  const metaMessage = err.details ? `${err.message} (${err.details})` : err.message
+  const metaMessage = metaErrorText(err, { includeSubcode: false })
   const target = objectForStep(step, ctx)
 
   const build = (
