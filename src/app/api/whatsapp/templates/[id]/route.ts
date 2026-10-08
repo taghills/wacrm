@@ -9,6 +9,7 @@ import {
   validateTemplatePayload,
   type TemplatePayload,
 } from '@/lib/whatsapp/template-validators'
+import { metaErrorText } from '@/lib/whatsapp/meta-error-explain'
 import { buildMetaTemplatePayload } from '@/lib/whatsapp/template-components'
 import { ensureMediaHeaderHandle } from '@/lib/whatsapp/template-header-handle'
 
@@ -171,7 +172,7 @@ export async function PATCH(
           components: metaPayload.components,
         })
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Meta edit failed.'
+        const message = e instanceof Error ? metaErrorText(e) : 'Meta edit failed.'
         await supabase
           .from('message_templates')
           .update({
@@ -299,7 +300,7 @@ export async function DELETE(
           metaTemplateId: existing.meta_template_id,
         })
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Meta delete failed.'
+        const message = e instanceof Error ? metaErrorText(e) : 'Meta delete failed.'
         return NextResponse.json({ error: message }, { status: 502 })
       }
     }

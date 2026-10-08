@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   explainMetaError,
   metaErrorPayload,
+  metaErrorText,
   type MetaErrorLike,
 } from "./meta-error-explain";
 
@@ -181,9 +182,12 @@ describe("explainMetaError — fallbacks", () => {
     expect(x.httpStatus).toBe(502);
     expect(x.summary).toMatch(/registering the phone number/);
     expect(x.summary).toMatch(/code 999999\/7/);
-    expect(x.summary).toMatch(/Something odd \(more detail\)/);
+    // One separator for every reason Meta sent, rather than
+    // parentheses that would have to nest once error_user_msg is in
+    // the line too.
+    expect(x.summary).toMatch(/Something odd — more detail/);
     expect(x.summary).toMatch(/Trace id TRACE1/);
-    expect(x.metaMessage).toBe("Something odd (more detail)");
+    expect(x.metaMessage).toBe("Something odd — more detail");
   });
 
   it("explains a plain network Error as a Meta-side reachability problem", () => {
@@ -216,5 +220,68 @@ describe("metaErrorPayload", () => {
       field: "access_token",
       message: "expired",
     });
+  });
+});
+
+// ============================================================
+// metaErrorText — the reason, wherever Meta put it.
+//
+// A template submit that fails returns a bare "Invalid parameter"
+// in `message`. Reading only that told the user nothing at all, and
+// nothing anywhere else recorded why. These cases pin down that the
+// reason survives.
+// ============================================================
+
+describe("metaErrorText", () => {
+  it("keeps the Business Management reason that `message` omits", () => {
+    // The shape a rejected template create actually returns.
+    expect(
+      metaErrorText(
+        metaErr({
+          message: "Invalid parameter",
+          code: 100,
+          subcode: 2388042,
+          userTitle: "Template Name Already Exists",
+          userMessage:
+            "A template with this name already exists in this language.",
+        }),
+      ),
+    ).toBe(
+      "Invalid parameter — Template Name Already Exists — " +
+        "A template with this name already exists in this language. " +
+        "[subcode 2388042]",
+    );
+  });
+
+  it("still carries the Cloud API's error_data.details", () => {
+    expect(
+      metaErrorText(
+        metaErr({ message: "(#131008) Required parameter is missing", details: "Param 7 is empty" }),
+      ),
+    ).toBe("(#131008) Required parameter is missing — Param 7 is empty");
+  });
+
+  it("prints a repeated sentence once", () => {
+    // Meta often echoes `message` inside error_user_msg; the same
+    // sentence twice reads like a bug in our own code.
+    expect(
+      metaErrorText(metaErr({ message: "Invalid parameter", userMessage: "Invalid parameter" })),
+    ).toBe("Invalid parameter");
+  });
+
+  it("omits the subcode when Meta sent none", () => {
+    expect(metaErrorText(metaErr({ message: "Invalid parameter", subcode: null }))).toBe(
+      "Invalid parameter",
+    );
+  });
+
+  it("falls back to a plain Error's message", () => {
+    expect(metaErrorText(new Error("network down"))).toBe("network down");
+  });
+
+  it("says so rather than returning an empty line", () => {
+    expect(metaErrorText(metaErr({ message: "" }))).toBe(
+      "Meta rejected the request without saying why.",
+    );
   });
 });
