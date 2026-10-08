@@ -276,6 +276,35 @@ describe('templatePlanFor', () => {
     expect(plan?.documentUrl).toBe('https://erp.taghills.com/d/abc');
   });
 
+  it('names the attachment after the document, not the event', () => {
+    // The mislabel: the url fell back to the OTHER field while the
+    // filename was still chosen by the event type, so a delivery
+    // whose invoice was not ready yet handed the customer the
+    // RECEIPT called `Invoice-TH-0001.pdf` — a file whose name
+    // contradicts its contents, and indistinguishable from the ERP
+    // having sent the wrong link.
+    const delivered = templatePlanFor(
+      event('order.delivered', {
+        ...orderData,
+        receiptPdf: 'https://erp.taghills.com/r/receipt.pdf',
+      }),
+      opts,
+    );
+    expect(delivered?.documentUrl).toBe('https://erp.taghills.com/r/receipt.pdf');
+    expect(delivered?.documentFilename).toBe('Receipt-TH-0001.pdf');
+
+    // And the mirror image, on an order whose receipt is missing.
+    const created = templatePlanFor(
+      event('order.created', {
+        ...orderData,
+        invoicePdf: 'https://erp.taghills.com/i/invoice.pdf',
+      }),
+      opts,
+    );
+    expect(created?.documentUrl).toBe('https://erp.taghills.com/i/invoice.pdf');
+    expect(created?.documentFilename).toBe('Invoice-TH-0001.pdf');
+  });
+
   it('takes the invoice on a delivery, not a receipt that rode along', () => {
     const plan = templatePlanFor(
       event('order.delivered', {
