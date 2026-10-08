@@ -1696,7 +1696,7 @@
       "reviewUrlPlaceholder": "https://g.page/r/…",
       "reviewUrlHelp": "Used only for stores that have no review link of their own. Each branch's own link is set in Settings → Stores. Must start with https://.",
       "reviewUrlFromEnv": "This link currently comes from a hosting setting. Saving here takes over from it.",
-      "reviewUrlUnset": "No link is set, so review requests are not being sent.",
+      "reviewUrlUnset": "No fallback link is set. A branch with its own link in Settings → Stores still sends; a branch without one is skipped.",
       "delayLabel": "Ask for a review after (days)",
       "delayHelp": "Days after delivery before the review request goes out. 0 sends it with the delivery message. Maximum {max}.",
       "save": "Save changes",

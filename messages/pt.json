@@ -1696,7 +1696,7 @@
       "reviewUrlPlaceholder": "https://g.page/r/…",
       "reviewUrlHelp": "Usado apenas para lojas sem link próprio. O link de cada loja é definido em Configurações → Lojas. Precisa começar com https://.",
       "reviewUrlFromEnv": "Este link vem de uma configuração da hospedagem. Salvar aqui passa a substituí-la.",
-      "reviewUrlUnset": "Nenhum link configurado, então pedidos de avaliação não estão sendo enviados.",
+      "reviewUrlUnset": "Nenhum link de reserva configurado. Uma filial com o próprio link em Configurações → Lojas continua enviando; uma filial sem link é ignorada.",
       "delayLabel": "Pedir avaliação depois de (dias)",
       "delayHelp": "Dias após a entrega antes de enviar o pedido de avaliação. 0 envia junto com a mensagem de entrega. Máximo {max}.",
       "save": "Salvar alterações",

@@ -1696,7 +1696,7 @@
       "reviewUrlPlaceholder": "https://g.page/r/…",
       "reviewUrlHelp": "Se usa solo para tiendas sin enlace propio. El enlace de cada tienda se configura en Ajustes → Tiendas. Debe empezar por https://.",
       "reviewUrlFromEnv": "Este enlace proviene ahora de una configuración del hosting. Al guardar aquí, se sustituye.",
-      "reviewUrlUnset": "No hay enlace configurado, así que no se envían solicitudes de reseña.",
+      "reviewUrlUnset": "No hay enlace de reserva configurado. Una sucursal con su propio enlace en Ajustes → Tiendas sigue enviando; una sucursal sin enlace se omite.",
       "delayLabel": "Pedir reseña después de (días)",
       "delayHelp": "Días tras la entrega antes de enviar la solicitud de reseña. 0 la envía con el mensaje de entrega. Máximo {max}.",
       "save": "Guardar cambios",
