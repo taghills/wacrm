@@ -22,7 +22,14 @@
 //
 // Matching reuses the store-name normalisation (case, spaces and
 // punctuation stripped), so `Demo Store`, `demo-store` and `DEMO
-// STORE` are the same branch, and a CRM store's short code works too.
+// STORE` are the same branch.
+//
+// What it compares is the branch string ON THE EVENT, nothing else.
+// A CRM store's short code does NOT work — this module never reads
+// the stores table, and setting the gate to `BARD` for a store the
+// ERP calls `bardoli` silences that shop with no error anywhere.
+// Use the name the ERP puts on the order, which the ledger's skip
+// reason quotes back verbatim.
 // ============================================================
 
 import { normalizeStoreKey } from './process';
