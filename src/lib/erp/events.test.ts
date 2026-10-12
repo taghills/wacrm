@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
   extractBranch,
+  extractBranchReviewUrl,
   extractCustomer,
   formatDate,
   formatMoney,
@@ -207,6 +208,37 @@ describe('sanitizeParam', () => {
   it('is empty for null and undefined', () => {
     expect(sanitizeParam(null)).toBe('');
     expect(sanitizeParam(undefined)).toBe('');
+  });
+});
+
+describe('extractBranchReviewUrl', () => {
+  // The ERP owns these links now — entered once in Staff & Stores,
+  // which also converts a bare Place ID or a share link into one that
+  // opens the review box rather than the shop page.
+  const ev = (data: Record<string, unknown>) => ({ id: 'e', type: 'order.created', data });
+
+  it('takes the branch link the ERP sent', () => {
+    expect(extractBranchReviewUrl(ev({ branchReviewUrl: 'https://g.page/r/abc/review' }))).toBe(
+      'https://g.page/r/abc/review',
+    );
+  });
+
+  it('refuses anything that is not https', () => {
+    // This value becomes a redirect target, and a scheme we did not
+    // check is how open redirects are built.
+    expect(extractBranchReviewUrl(ev({ branchReviewUrl: 'http://g.page/r/abc' }))).toBeNull();
+    expect(
+      extractBranchReviewUrl(ev({ branchReviewUrl: 'javascript:alert(1)' })),
+    ).toBeNull();
+  });
+
+  it('is null when the ERP sent nothing usable', () => {
+    // Distinct from "the ERP sent none": the caller must not clear a
+    // link an operator typed in, and this is how it tells them apart.
+    expect(extractBranchReviewUrl(ev({}))).toBeNull();
+    expect(extractBranchReviewUrl(ev({ branchReviewUrl: '' }))).toBeNull();
+    expect(extractBranchReviewUrl(ev({ branchReviewUrl: '   ' }))).toBeNull();
+    expect(extractBranchReviewUrl(ev({ branchReviewUrl: 42 }))).toBeNull();
   });
 });
 

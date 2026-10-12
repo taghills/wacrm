@@ -370,6 +370,23 @@ export function extractDocument(event: ErpEvent): ErpDocument | null {
 }
 
 /**
+ * The serving branch's Google review link, when the ERP sent one.
+ *
+ * The ERP owns these now: they are entered once in Staff & Stores,
+ * which also converts a bare Place ID or a `g.page/r/…` share link
+ * into one that opens the review box rather than the shop page. A
+ * link kept in two places drifts, and the half nobody edited is the
+ * half that sends.
+ *
+ * https only, same reason as the document link — and because this one
+ * ends up as a redirect target, where a scheme we did not check is
+ * how open redirects are built.
+ */
+export function extractBranchReviewUrl(event: ErpEvent): string | null {
+  return httpsUrl(event.data.branchReviewUrl);
+}
+
+/**
  * A value we are willing to hand Meta as a document link.
  *
  * Only https: a document header is fetched by Meta's servers, so an

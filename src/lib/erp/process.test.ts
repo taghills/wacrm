@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSendParams,
   downgradeToApprovedTemplate,
+  linkContactToBranch,
   normalizeStoreKey,
   queueReviewIfHandedOver,
   sendFailureDetail,
@@ -385,5 +386,98 @@ describe('queueReviewIfHandedOver', () => {
     const { ctx } = ctxWith(null);
     const due = await queueReviewIfHandedOver(ctx, DELIVERED, 'contact-1', 'demo');
     expect(due).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+// ============================================================
+// The store's review link, now owned by the ERP.
+//
+// Entered once in Staff & Stores, which converts a Place ID or a
+// share link into one that opens the review box. Two copies drift,
+// and the half nobody edited is the half that sends.
+//
+// The rule worth a test: the ERP can SET or CHANGE a link and can
+// never CLEAR one. An event with no field — an older ERP build, or a
+// store whose link has not been pasted in yet — must not wipe a link
+// an operator typed into Settings -> Stores. "Said nothing" and
+// "said none" are not the same, and only one is a reason to stop
+// asking customers for reviews.
+// ============================================================
+
+describe('linkContactToBranch — the ERP review link', () => {
+  const STORE = {
+    id: '11111111-2222-3333-4444-555555555555',
+    name: 'Bardoli',
+    code: 'BARD',
+    phone: '+91 76786 88524',
+    review_url: null as string | null,
+  };
+
+  function ctxWith(storeReviewUrl: string | null) {
+    const updates: Array<Record<string, unknown>> = [];
+    const db = {
+      from: (table: string) => {
+        if (table === 'stores') {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: async () => ({ data: [{ ...STORE, review_url: storeReviewUrl }] }),
+              }),
+            }),
+            update: (patch: Record<string, unknown>) => {
+              updates.push(patch);
+              return { eq: () => ({ eq: async () => ({ error: null }) }) };
+            },
+          };
+        }
+        // contact_stores
+        return { upsert: async () => ({ error: null }) };
+      },
+    };
+    const ctx = {
+      db,
+      accountId: 'acc-1',
+      currency: 'INR',
+      reviewUrl: null,
+      reviewDelayDays: 3,
+      allowedBranches: [],
+    } as unknown as Parameters<typeof linkContactToBranch>[0];
+    return { ctx, updates };
+  }
+
+  const LINK = 'https://g.page/r/bardoli/review';
+
+  it('fills in a link the store did not have', async () => {
+    const { ctx, updates } = ctxWith(null);
+    const out = await linkContactToBranch(ctx, 'contact-1', 'Bardoli', LINK);
+    expect(out.linked && out.storeReviewUrl).toBe(LINK);
+    expect(updates).toEqual([{ review_url: LINK }]);
+  });
+
+  it('uses the new link on this very message, not the next one', async () => {
+    // The order that carries a new link should be able to use it.
+    // Returning the stale value would delay every store's first
+    // working review request by one order.
+    const { ctx } = ctxWith('https://g.page/r/old/review');
+    const out = await linkContactToBranch(ctx, 'contact-1', 'Bardoli', LINK);
+    expect(out.linked && out.storeReviewUrl).toBe(LINK);
+  });
+
+  it('never clears a link when the event carries none', async () => {
+    // The case that would silently stop review requests for a whole
+    // branch: an older ERP build, or a store nobody has pasted a link
+    // into yet.
+    for (const incoming of [undefined, null, '', '   ']) {
+      const { ctx, updates } = ctxWith(LINK);
+      const out = await linkContactToBranch(ctx, 'contact-1', 'Bardoli', incoming);
+      expect(out.linked && out.storeReviewUrl).toBe(LINK);
+      expect(updates).toEqual([]);
+    }
+  });
+
+  it('writes nothing when the link has not changed', async () => {
+    const { ctx, updates } = ctxWith(LINK);
+    await linkContactToBranch(ctx, 'contact-1', 'Bardoli', LINK);
+    expect(updates).toEqual([]);
   });
 });
