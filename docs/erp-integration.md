@@ -188,7 +188,43 @@ curl -i https://wa.taghills.com/api/erp/events \
   -H 'Content-Type: application/json' -d "$BODY"
 ```
 
-Expect `200 {}`.
+Expect `200` with a `results` array naming that event's outcome.
+
+### What the response says
+
+Every event comes back with its own outcome, in the order sent:
+
+```json
+{ "results": [
+  { "eventId": "2700", "status": "sent",
+    "reason": "sent order_confirmation_doc | filed to bardoli" },
+  { "eventId": "2701", "status": "skipped",
+    "reason": "held back: sending is limited to bardoli, this event is for Bahadurgarh" }
+]}
+```
+
+`status` is **the ERP's vocabulary, not ours**: `sent`, `skipped`,
+`failed`. `sent` is claimed only when a message really reached Meta —
+our own `done` does not mean that, because `ping` and `customer.upsert`
+succeed having sent nothing, and reporting those as sent would
+re-create the confusion this exists to remove. `reason` is always
+present.
+
+This exists because a `200` used to mean "processed", which the ERP
+reasonably read as "sent". An event the CRM deliberately skipped — a
+branch held back by the gate, a store with no phone number, a branch
+matching no CRM store, a template not yet approved — was
+indistinguishable from a delivered message, and staff saw "sent"
+against a bill nobody had been told about.
+
+`failed` is unchanged and still drives the ERP's retries. `results` is
+additive, so an ERP that does not read it yet is unaffected.
+
+One known limit: a **replayed** event is answered from the ledger,
+which does not store the message id, so a replayed `ping` or
+`customer.upsert` reads as `sent`. Its `reason` still says what
+happened. Storing the message id removes this, and is what the
+per-event status endpoint needs anyway.
 
 ## Idempotency
 
@@ -212,9 +248,16 @@ message.
 ## The send gate — running a trial on one branch
 
 `ERP_SEND_ONLY_BRANCHES` limits which branches may actually send a
-WhatsApp message. Comma-separated names or store codes, matched with
-the same normalisation as store lookup, so `Demo Store`, `demo-store`
-and `DEMO STORE` are one branch.
+WhatsApp message. Comma-separated, matched with the same normalisation
+as store lookup, so `Demo Store`, `demo-store` and `DEMO STORE` are
+one branch.
+
+Each entry must be **the branch name the ERP puts on the order**, not
+a CRM store code: the gate compares against the event's own branch
+string and never reads the stores table. Setting it to `BARD` for a
+store the ERP calls `bardoli` silences that shop with no error
+anywhere. The skip reason in the ledger quotes the ERP's branch name
+verbatim — copy it from there.
 
 Unset, every branch sends — the behaviour every deployment has by
 default. Set, only the named branches do.

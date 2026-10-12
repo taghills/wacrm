@@ -87,6 +87,15 @@ export interface ErpEventOutcome {
   status: ErpEventStatus;
   detail?: string;
   contactId?: string;
+  /**
+   * Meta's id for the message this event sent, when it sent one.
+   *
+   * Its PRESENCE is the only honest answer to "did a customer
+   * actually receive something". `status: 'done'` does not mean that:
+   * `ping` and `customer.upsert` both succeed having sent nothing,
+   * and the ERP's report must not call those sent.
+   */
+  whatsappMessageId?: string;
 }
 
 /**
@@ -642,8 +651,9 @@ export async function processErpEvent(
     customer.name ?? null,
   );
 
+  let whatsappMessageId: string | undefined;
   try {
-    await sendMessageToConversation(ctx.db, ctx.accountId, {
+    const sendResult = await sendMessageToConversation(ctx.db, ctx.accountId, {
       conversationId,
       messageType: 'template',
       templateName: usable.templateName,
@@ -657,6 +667,7 @@ export async function processErpEvent(
         link?.linked ? link.storeId : null,
       ),
     });
+    whatsappMessageId = sendResult.whatsappMessageId ?? undefined;
   } catch (err) {
     // Meta's own errors name neither the template nor the attachment:
     // "(#132001) Template name does not exist in the translation" is
@@ -685,6 +696,7 @@ export async function processErpEvent(
       note,
     ),
     contactId: contact.id,
+    whatsappMessageId,
   };
 }
 

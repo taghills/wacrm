@@ -13,10 +13,21 @@
 // `request.text()` once and parses that same string.
 //
 // Response contract (set by the ERP's retry logic):
-//   200 {}                     — all events accepted
-//   200 {"failed":["1042"]}    — those ids are retried by the ERP
+//   200 {"results":[...]}      — every event's outcome, in order
+//   200 {"failed":["1042"], "results":[...]}
+//                              — the ids in `failed` are retried
 //   4xx / 5xx                  — the WHOLE batch is retried, 8 times
 //                                with backoff, then given up on
+//
+// `failed` is unchanged and still drives the ERP's retries. `results`
+// is additive, and exists because a 200 used to mean "processed",
+// which the ERP reasonably read as "sent". An event the CRM
+// deliberately SKIPPED — branch held back by the rollout gate, store
+// with no phone number, branch matching no CRM store, template not
+// approved — came back indistinguishable from a message that reached
+// the customer. Staff saw "sent" against a bill nobody was ever told
+// about. Each entry now carries `sent` / `skipped` / `failed` and,
+// always, the reason in words a person can act on.
 //
 // So a per-event problem must never become a non-2xx: one bad
 // customer record would otherwise make the ERP re-send 99 good
@@ -29,6 +40,11 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import { verifyBearer, verifyEventSignature } from '@/lib/erp/signature';
 import { parseEventBatch, MAX_EVENTS_PER_BATCH } from '@/lib/erp/events';
+import {
+  reportFor,
+  reportForSettled,
+  type ErpEventReport,
+} from '@/lib/erp/event-report';
 import { resolveMessageSettings } from '@/lib/erp/message-settings';
 import { parseAllowedBranches } from '@/lib/erp/send-gate';
 import {
@@ -124,13 +140,22 @@ export async function POST(request: Request) {
   const ids = events.map((e) => e.id);
   const { data: seen } = await db
     .from('erp_events')
-    .select('event_id, status')
+    // `detail` too: a replayed event is answered from the ledger, and
+    // an answer with no reason is the silence this endpoint is being
+    // changed to stop.
+    .select('event_id, status, detail')
     .eq('account_id', accountId)
     .in('event_id', ids.slice(0, MAX_EVENTS_PER_BATCH));
-  const settled = new Set(
+  const settled = new Map(
     (seen ?? [])
       .filter((row) => row.status !== 'failed')
-      .map((row) => row.event_id as string),
+      .map((row) => [
+        row.event_id as string,
+        {
+          status: String(row.status),
+          detail: (row.detail as string | null) ?? null,
+        },
+      ]),
   );
 
   // ---- process ------------------------------------------------
@@ -139,8 +164,18 @@ export async function POST(request: Request) {
   // contact, and running them in parallel would race the
   // find-or-create into creating two.
   const failed: string[] = [];
+  // One entry per event in the batch, in the order they arrived. The
+  // ERP shows `skipped: <reason>` to shop staff instead of "sent",
+  // which is the whole point: a held-back branch or a store with no
+  // phone number used to be indistinguishable from a delivered
+  // message.
+  const results: ErpEventReport[] = [];
   for (const event of events) {
-    if (settled.has(event.id)) continue;
+    const already = settled.get(event.id);
+    if (already) {
+      results.push(reportForSettled(event.id, already.status, already.detail));
+      continue;
+    }
 
     let outcome: ErpEventOutcome;
     try {
@@ -151,6 +186,8 @@ export async function POST(request: Request) {
       outcome = { status: 'failed', detail };
       failed.push(event.id);
     }
+
+    results.push(reportFor(event.id, outcome));
 
     // Record before moving on. If the function dies mid-batch, the
     // events already handled stay handled and the ERP's retry only
@@ -179,5 +216,10 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json(failed.length > 0 ? { failed } : {});
+  // `failed` keeps its exact shape and meaning — the ERP retries on
+  // it and that contract is not ours to change under them. `results`
+  // is additive: an ERP that has not been updated yet ignores it.
+  return NextResponse.json(
+    failed.length > 0 ? { failed, results } : { results },
+  );
 }
