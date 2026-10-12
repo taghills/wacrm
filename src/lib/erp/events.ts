@@ -47,6 +47,18 @@ export const KNOWN_EVENT_TYPES = [
   'order.ready',
   'order.delivered',
   /**
+   * A counter sale: sunglasses, a case, a cleaning kit — anything the
+   * customer pays for and carries out. The ERP identifies it as a
+   * bill with no lens lines, saved as delivered at creation.
+   *
+   * A separate event because the three-step wording is wrong for it.
+   * Sent as `order.created` + `order.delivered`, a counter sale put
+   * two messages seconds apart on the customer's phone, the first
+   * promising to tell them when their purchase was "ready for
+   * collection" — for something already in their bag.
+   */
+  'order.sold',
+  /**
    * The review request, sent some days AFTER delivery. It is a
    * separate event rather than a delay on `order.delivered` because
    * the CRM has no scheduler of its own for ERP events: the ERP
@@ -432,6 +444,27 @@ export function templatePlanFor(
         : { templateName: 'order_confirmation', params };
     }
 
+    case 'order.sold': {
+      // No delivery date and no balance: both are answered by the
+      // customer standing at the counter, and `Balance: ₹0` on a
+      // paid-in-full sale reads like a mistake.
+      const params = [
+        name,
+        orFallback(branch, 'TAGHills'),
+        orFallback(billNo, '-'),
+        formatMoney(data.paid, currency),
+        phone,
+      ];
+      return pdf
+        ? {
+            templateName: 'counter_sale_doc',
+            params,
+            documentUrl: pdf.url,
+            documentFilename: documentFilename(pdf.kind, data.billNo),
+          }
+        : { templateName: 'counter_sale', params };
+    }
+
     case 'order.ready':
       return {
         templateName: 'order_ready',
@@ -504,6 +537,7 @@ export function templatePlanFor(
 export function plainTemplateFor(templateName: string): string | null {
   if (templateName === 'order_confirmation_doc') return 'order_confirmation';
   if (templateName === 'order_delivered_invoice') return 'order_delivered';
+  if (templateName === 'counter_sale_doc') return 'counter_sale';
   return null;
 }
 

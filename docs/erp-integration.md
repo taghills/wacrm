@@ -46,6 +46,8 @@ event will deliver:
 | `order.ready` | `order_ready` | name, bill no, branch, balance, branch phone |
 | `order.delivered` | `order_delivered` | name, bill no, branch, branch phone |
 | `order.delivered` + PDF | `order_delivered_invoice` | the same four, plus an invoice PDF header |
+| `order.sold` | `counter_sale` | name, branch, bill no, amount paid, branch phone |
+| `order.sold` + PDF | `counter_sale_doc` | the same five, plus a receipt PDF header |
 | `order.review` | `review_request` | name, branch, branch phone (review link on the button) |
 | `customer.recall` | `eye_test_recall` | name, branch, branch phone |
 
@@ -66,13 +68,41 @@ to each other when the preferred one is empty, so naming the file after
 the event handed the customer an invoice called `Receipt-…` — a name
 that contradicts its contents.
 
+#### The counter sale
+
+`order.sold` is a bill with no lens lines, saved as delivered at
+creation — sunglasses, a case, a cleaning kit. The ERP sends it
+*instead of* `order.created` and `order.delivered`, with an identical
+payload.
+
+It exists because the three-step wording is wrong for it. Sent as a
+creation followed by a delivery, a counter sale put two messages
+seconds apart on the customer's phone, the first promising to tell
+them when their purchase was "ready for collection" — for something
+already in their bag.
+
+Its template carries no delivery date and no balance: both are
+answered by the customer standing at the counter, and `Balance: ₹0` on
+a paid-in-full sale reads like a mistake.
+
+It queues a review request, exactly as a delivery does. Keying that on
+`order.delivered` alone would have asked every spectacles customer and
+no sunglasses customer, silently, for as long as nobody counted.
+
 #### Why two templates per PDF
 
 Meta fixes a template's shape at approval. A template approved **with**
 a document header must carry a document on every send; one approved
 **without** can never gain one. So "attach the receipt when the ERP
-gives us a link" is two approved templates with identical wording, and
-the plan picks between them per order. The ERP supplies the link as
+gives us a link" is two approved templates, and the plan picks between
+them per order.
+
+Their wording is the same **except for the sentence about the
+attachment**: `order_delivered_invoice` says "Your invoice is attached
+for your records" and `order_delivered` does not, because the plain
+one has nothing attached. A pair whose wording were copied verbatim
+would promise a file that is not there — the one difference that is
+not a drift to be fixed. The ERP supplies the link as
 `receiptPdf` on `order.created` and `invoicePdf` on `order.delivered`;
 both are optional, and a non-`https` link is ignored rather than sent,
 because Meta's servers fetch the file and an `http` failure surfaces

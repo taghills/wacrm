@@ -15,7 +15,7 @@ import {
   buildSendParams,
   downgradeToApprovedTemplate,
   normalizeStoreKey,
-  queueReviewIfDelivered,
+  queueReviewIfHandedOver,
   sendFailureDetail,
   storeLinkNote,
   UNMATCHED_BRANCH,
@@ -297,7 +297,7 @@ describe('downgradeToApprovedTemplate', () => {
 // why.
 // ============================================================
 
-describe('queueReviewIfDelivered', () => {
+describe('queueReviewIfHandedOver', () => {
   function ctxWith(reviewUrl: string | null) {
     const upserts: Array<Record<string, unknown>> = [];
     const db = {
@@ -319,7 +319,7 @@ describe('queueReviewIfDelivered', () => {
       reviewUrl,
       reviewDelayDays: 3,
       allowedBranches: [],
-    } as unknown as Parameters<typeof queueReviewIfDelivered>[0];
+    } as unknown as Parameters<typeof queueReviewIfHandedOver>[0];
     return { ctx, upserts };
   }
 
@@ -334,7 +334,7 @@ describe('queueReviewIfDelivered', () => {
     // Google listing got no review request because this field —
     // which is only the fallback — was blank.
     const { ctx, upserts } = ctxWith(null);
-    const due = await queueReviewIfDelivered(ctx, DELIVERED, 'contact-1', 'Shastri Nagar');
+    const due = await queueReviewIfHandedOver(ctx, DELIVERED, 'contact-1', 'Shastri Nagar');
     expect(due).not.toBeNull();
     expect(upserts).toHaveLength(1);
     expect(upserts[0]).toMatchObject({
@@ -348,14 +348,26 @@ describe('queueReviewIfDelivered', () => {
 
   it('still queues when there is one', async () => {
     const { ctx, upserts } = ctxWith('https://g.page/r/account');
-    expect(await queueReviewIfDelivered(ctx, DELIVERED, 'contact-1', 'demo')).not.toBeNull();
+    expect(await queueReviewIfHandedOver(ctx, DELIVERED, 'contact-1', 'demo')).not.toBeNull();
     expect(upserts).toHaveLength(1);
   });
 
-  it('queues nothing for an event that is not a delivery', async () => {
+  it('queues for a counter sale too, not only a delivery', async () => {
+    // Sunglasses handed over the counter owe a review just as much —
+    // arguably sooner, with no lens to adapt to. Keying on
+    // order.delivered alone asked every spectacles customer and no
+    // sunglasses customer, silently.
+    const { ctx, upserts } = ctxWith(null);
+    const sold = { id: 'evt-9', type: 'order.sold', data: { billNo: 'BARD-0001' } };
+    expect(await queueReviewIfHandedOver(ctx, sold, 'contact-1', 'bardoli')).not.toBeNull();
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0]).toMatchObject({ erp_order_key: 'BARD-0001', branch: 'bardoli' });
+  });
+
+  it('queues nothing for an event that is not a hand-over', async () => {
     const { ctx, upserts } = ctxWith('https://g.page/r/account');
     const ready = { id: 'evt-2', type: 'order.ready', data: { billNo: 'TH-0001' } };
-    expect(await queueReviewIfDelivered(ctx, ready, 'contact-1', 'demo')).toBeNull();
+    expect(await queueReviewIfHandedOver(ctx, ready, 'contact-1', 'demo')).toBeNull();
     expect(upserts).toHaveLength(0);
   });
 
@@ -365,13 +377,13 @@ describe('queueReviewIfDelivered', () => {
     // all of them.
     const { ctx, upserts } = ctxWith('https://g.page/r/account');
     const nameless = { id: 'evt-3', type: 'order.delivered', data: {} };
-    expect(await queueReviewIfDelivered(ctx, nameless, 'contact-1', 'demo')).toBeNull();
+    expect(await queueReviewIfHandedOver(ctx, nameless, 'contact-1', 'demo')).toBeNull();
     expect(upserts).toHaveLength(0);
   });
 
   it('reports the due day for the ledger', async () => {
     const { ctx } = ctxWith(null);
-    const due = await queueReviewIfDelivered(ctx, DELIVERED, 'contact-1', 'demo');
+    const due = await queueReviewIfHandedOver(ctx, DELIVERED, 'contact-1', 'demo');
     expect(due).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

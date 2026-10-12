@@ -331,6 +331,47 @@ describe('templatePlanFor', () => {
     expect(plan?.documentUrl).toBe('https://erp.taghills.com/r/receipt.pdf');
   });
 
+  it('maps order.sold to the counter-sale wording', () => {
+    // A counter sale — sunglasses paid for and carried out. Sent as
+    // order.created + order.delivered it put two messages seconds
+    // apart on the phone, the first promising to say when the
+    // purchase was "ready for collection".
+    const plan = templatePlanFor(event('order.sold', orderData), opts);
+    expect(plan?.templateName).toBe('counter_sale');
+    expect(plan?.params).toEqual([
+      'Asha Verma',
+      'Shastri Nagar',
+      'TH-0001',
+      expect.stringMatching(/2,000/),
+      PHONE,
+    ]);
+  });
+
+  it('carries no delivery date or balance on a counter sale', () => {
+    // Both are answered by the customer standing at the counter, and
+    // `Balance: ₹0` on a paid-in-full sale reads like a mistake.
+    const plan = templatePlanFor(event('order.sold', orderData), opts);
+    expect(plan?.params).toHaveLength(5);
+    expect(plan?.params.join(' | ')).not.toMatch(/Oct 2026/);
+  });
+
+  it('attaches the receipt on a counter sale, named as a receipt', () => {
+    const plan = templatePlanFor(
+      event('order.sold', {
+        ...orderData,
+        receiptPdf: 'https://erp.taghills.com/r/TH-0001.pdf',
+      }),
+      opts,
+    );
+    expect(plan?.templateName).toBe('counter_sale_doc');
+    expect(plan?.documentUrl).toBe('https://erp.taghills.com/r/TH-0001.pdf');
+    expect(plan?.documentFilename).toBe('Receipt-TH-0001.pdf');
+  });
+
+  it('falls back to the plain counter sale while the _doc one waits', () => {
+    expect(plainTemplateFor('counter_sale_doc')).toBe('counter_sale');
+  });
+
   it('maps order.ready with the branch and the number', () => {
     const plan = templatePlanFor(event('order.ready', orderData), opts);
     expect(plan?.templateName).toBe('order_ready');
