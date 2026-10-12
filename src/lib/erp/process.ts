@@ -680,7 +680,7 @@ export async function processErpEvent(
   // A delivery owes a review request, a few days from now. Queued
   // AFTER the send so a failed delivery message does not leave a
   // review ask behind for an order the customer never heard about.
-  const queued = await queueReviewIfDelivered(ctx, event, contact.id, branch);
+  const queued = await queueReviewIfHandedOver(ctx, event, contact.id, branch);
 
   const downgraded =
     usable.templateName !== plan.templateName
@@ -701,11 +701,22 @@ export async function processErpEvent(
 }
 
 /**
- * Queue the review request for a delivered order, and report the day
- * it falls due for the ledger.
+ * The events after which the customer has their purchase.
  *
- * Returns null — and records nothing — when this is not a delivery,
- * or when the order carries no identifier we can make unique. That
+ * Both owe a review request, and a counter sale arguably sooner —
+ * there is no lens to adapt to. Keying on `order.delivered` alone
+ * would have asked every spectacles customer and no sunglasses
+ * customer, silently, for as long as nobody counted.
+ */
+const HANDS_OVER_THE_ORDER = new Set(['order.delivered', 'order.sold']);
+
+/**
+ * Queue the review request owed once the customer has their order,
+ * and report the day it falls due for the ledger.
+ *
+ * Returns null — and records nothing — when the customer does not
+ * have the order yet, or when it carries no identifier we can make
+ * unique. That
  * second case is worth being strict about: without a key, every
  * unidentified order in the account would collide on one queue row.
  *
@@ -718,13 +729,13 @@ export async function processErpEvent(
  * read it. Dropping the row here recorded nothing at all, which is
  * how "no review message ever arrived" became unanswerable.
  */
-export async function queueReviewIfDelivered(
+export async function queueReviewIfHandedOver(
   ctx: ErpProcessContext,
   event: ErpEvent,
   contactId: string,
   branch: string | null,
 ): Promise<string | null> {
-  if (event.type !== 'order.delivered') return null;
+  if (!HANDS_OVER_THE_ORDER.has(event.type)) return null;
 
   const orderKey = reviewOrderKey(event.data);
   if (!orderKey) return null;
