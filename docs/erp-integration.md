@@ -144,6 +144,26 @@ Gating the queue on the account-wide link instead dropped every
 delivery at a branch that had its own listing, recorded nothing, and
 left "no review message ever arrived" with no evidence anywhere.
 
+**The ERP owns the links.** Order events carry an optional
+`branchReviewUrl`, and the matched store's `review_url` is updated
+from it. They are entered once in Staff & Stores, which also converts
+a bare Place ID or a `g.page/r/…` share link into one that opens the
+review box rather than the shop page — a plain `maps.app.goo.gl` or
+`google.com/maps` link opens the listing and asks the customer to sign
+in first, which loses most of them.
+
+The sync can SET or CHANGE a link, never clear one. An event without
+the field — an older ERP build, or a store whose link has not been
+pasted in yet — must not wipe a link someone typed into Settings →
+Stores. "The ERP said nothing" is not "the ERP said none", and only
+one of those is a reason to stop asking customers for reviews.
+
+The link still reaches the customer through `/r/<store id>`, read at
+TAP time. That matters more here than it looks: the review request
+sends days after the event, so a link carried on the event would
+already be stale, and one pasted in between would not reach the
+customer waiting on it.
+
 `/api/erp/status` reports `hasPhone` and `hasReviewLink` per store, so
 an unfilled branch is visible before it costs a message. The link previously lived in
 `REVIEW_LINK_URL`; that variable is still honoured as a fallback, but a

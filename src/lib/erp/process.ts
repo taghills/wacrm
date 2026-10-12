@@ -31,6 +31,7 @@ import { resolveConversationByPhone } from '@/lib/whatsapp/resolve-conversation'
 import { sendMessageToConversation } from '@/lib/whatsapp/send-message';
 import {
   extractBranch,
+  extractBranchReviewUrl,
   extractCustomer,
   isKnownEventType,
   isMarketingEvent,
@@ -451,6 +452,12 @@ export async function linkContactToBranch(
   ctx: ErpProcessContext,
   contactId: string,
   branch: string,
+  /**
+   * The branch's Google review link as the ERP holds it, when the
+   * event carried one. Written through to the store, never read from
+   * here for the message itself — see `syncStoreReviewUrl`.
+   */
+  erpReviewUrl?: string | null,
 ): Promise<StoreLinkResult> {
   const { db, accountId } = ctx;
   const { data: stores } = await db
@@ -489,6 +496,13 @@ export async function linkContactToBranch(
       reason: `store link failed for branch ${branch}: ${error.message}`,
     };
   }
+  const storeReviewUrl = await syncStoreReviewUrl(
+    ctx,
+    String(match.id),
+    typeof match.review_url === 'string' ? match.review_url : null,
+    erpReviewUrl,
+  );
+
   return {
     linked: true,
     storeId: String(match.id),
@@ -497,11 +511,52 @@ export async function linkContactToBranch(
     storePhone: typeof match.phone === 'string' && match.phone.trim()
       ? match.phone.trim()
       : null,
-    storeReviewUrl:
-      typeof match.review_url === 'string' && match.review_url.trim()
-        ? match.review_url.trim()
-        : null,
+    storeReviewUrl,
   };
+}
+
+/**
+ * Keep the store's Google review link in step with the ERP's.
+ *
+ * The ERP is the source of truth: the links are entered once in
+ * Staff & Stores, which also turns a bare Place ID or a `g.page/r/…`
+ * share link into one that opens the review box rather than the shop
+ * page. Two copies of a link drift, and the half nobody edited is
+ * the half that sends.
+ *
+ * It can only SET or CHANGE a link, never clear one. An event
+ * arriving without the field — an older ERP build, or a store whose
+ * link has not been pasted in yet — must not wipe a link an operator
+ * typed into Settings -> Stores. "The ERP said nothing" is not the
+ * same as "the ERP said none", and only one of those is a reason to
+ * stop asking customers for reviews.
+ *
+ * Returns the link the caller should treat as current, so a store
+ * whose link arrives on this very event is usable on this very
+ * message rather than the next one.
+ */
+async function syncStoreReviewUrl(
+  ctx: ErpProcessContext,
+  storeId: string,
+  current: string | null,
+  incoming: string | null | undefined,
+): Promise<string | null> {
+  const existing = current?.trim() || null;
+  const next = incoming?.trim() || null;
+  if (!next || next === existing) return existing;
+
+  const { error } = await ctx.db
+    .from('stores')
+    .update({ review_url: next })
+    .eq('id', storeId)
+    .eq('account_id', ctx.accountId);
+  if (error) {
+    // Not fatal. The order's own message does not depend on it, and
+    // the previous link — if any — still works.
+    console.warn('[erp] store review_url sync failed:', error.message);
+    return existing;
+  }
+  return next;
 }
 
 /** Lowercase, strip everything that is not a letter or a digit. */
@@ -542,7 +597,12 @@ export async function processErpEvent(
   // two different things and only the ledger can tell the operator
   // the second one happened.
   const link = branch
-    ? await linkContactToBranch(ctx, contact.id, branch)
+    ? await linkContactToBranch(
+        ctx,
+        contact.id,
+        branch,
+        extractBranchReviewUrl(event),
+      )
     : null;
   const note = storeLinkNote(link);
 
