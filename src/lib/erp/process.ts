@@ -105,6 +105,11 @@ export interface ErpEventOutcome {
   messageId?: string;
   /** The branch the ERP named, for the activity screen's filter. */
   branch?: string | null;
+  /**
+   * The bill number, else the ERP's order id — what a person types
+   * into the search box, and what a customer is holding.
+   */
+  orderRef?: string | null;
 }
 
 /**
@@ -613,6 +618,10 @@ export async function processErpEvent(
       )
     : null;
   const note = storeLinkNote(link);
+  // The bill number, for Message activity's search and for the row
+  // itself. Same key the review queue uses, so one order reads the
+  // same in both places.
+  const orderRef = reviewOrderKey(event.data);
 
   // `customer.upsert` is a data event: it keeps the CRM in step with
   // the ERP and deliberately sends nothing.
@@ -622,6 +631,7 @@ export async function processErpEvent(
       detail: withNote('contact synced', note),
       contactId: contact.id,
       branch,
+      orderRef,
     };
   }
 
@@ -637,6 +647,7 @@ export async function processErpEvent(
       detail: withNote(gate.reason, note),
       contactId: contact.id,
       branch,
+      orderRef,
     };
   }
 
@@ -646,6 +657,7 @@ export async function processErpEvent(
       detail: withNote('contact opted out of marketing', note),
       contactId: contact.id,
       branch,
+      orderRef,
     };
   }
 
@@ -666,6 +678,7 @@ export async function processErpEvent(
       ),
       contactId: contact.id,
       branch,
+      orderRef,
     };
   }
 
@@ -707,6 +720,7 @@ export async function processErpEvent(
       ),
       contactId: contact.id,
       branch,
+      orderRef,
     };
   }
 
@@ -774,6 +788,7 @@ export async function processErpEvent(
     whatsappMessageId,
     messageId,
     branch,
+    orderRef,
   };
 }
 

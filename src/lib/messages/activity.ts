@@ -59,6 +59,8 @@ export interface ActivityRow {
   /** Why, in the words the ledger recorded. */
   detail: string | null;
   branch: string | null;
+  /** The bill number, else the ERP's order id. What people quote. */
+  orderRef: string | null;
   receivedAt: string;
   contactName: string | null;
   contactId: string | null;

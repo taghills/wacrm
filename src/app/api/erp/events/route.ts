@@ -205,6 +205,7 @@ export async function POST(request: Request) {
         // so the order's own branch is the only honest answer), and
         // the message id is its join to what Meta did afterwards.
         branch: outcome.branch ?? null,
+        order_ref: outcome.orderRef ?? null,
         message_id: outcome.messageId ?? null,
         received_at: new Date().toISOString(),
       },

@@ -28,6 +28,7 @@ function row(over: Partial<ActivityRow> = {}): ActivityRow {
     erpStatus: 'done',
     detail: 'sent order_confirmation_doc | filed to bardoli',
     branch: 'bardoli',
+    orderRef: 'BARD-2627-SO-0012',
     receivedAt: '2026-10-12T14:57:04Z',
     contactName: 'Asha Verma',
     contactId: 'c-1',
@@ -145,5 +146,19 @@ describe('isActivityOutcome', () => {
     expect(isActivityOutcome('failed')).toBe(true);
     expect(isActivityOutcome('exploded')).toBe(false);
     expect(isActivityOutcome(null)).toBe(false);
+  });
+});
+
+describe('the bill number', () => {
+  it('rides on the row so the search box has something to match', () => {
+    // "Asha Verma, Bahadurgarh, not sent" is a worse answer than
+    // "BDGR-2627-SO-0014, not sent" when four people called Asha
+    // bought glasses this month.
+    const entry = entryFor(row({ orderRef: 'BDGR-2627-SO-0014' }));
+    expect(entry.orderRef).toBe('BDGR-2627-SO-0014');
+  });
+
+  it('is absent, not blank, for an event that has no order', () => {
+    expect(entryFor(row({ orderRef: null })).orderRef).toBeNull();
   });
 });

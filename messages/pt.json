@@ -2212,6 +2212,9 @@
       "payment_received": "Pagamento recebido",
       "ping": "Teste",
       "customer_upsert": "Sincronização de contato"
-    }
+    },
+    "searchPlaceholder": "Buscar por número da nota ou motivo",
+    "searchLabel": "Buscar mensagens",
+    "noDeliveryYet": "Entregue e Lida são preenchidos conforme o WhatsApp informa. Mensagens enviadas antes desta tela não têm registro de entrega."
   }
 }

@@ -2212,6 +2212,9 @@
       "payment_received": "Payment received",
       "ping": "Test",
       "customer_upsert": "Contact sync"
-    }
+    },
+    "searchPlaceholder": "Search by bill number or reason",
+    "searchLabel": "Search messages",
+    "noDeliveryYet": "Delivered and Read fill in from WhatsApp as it reports back. Messages sent before this screen existed have no delivery record."
   }
 }
