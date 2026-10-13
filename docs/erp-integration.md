@@ -171,8 +171,22 @@ value saved in Settings wins.
 
 **Nothing in this app is scheduled**, and Hostinger's Node app hosting
 has no cron of its own, so the clock lives in GitHub Actions:
-`.github/workflows/review-cron.yml` calls the endpoint daily at 03:30
-UTC (09:00 IST) and can be run by hand from the Actions tab. It needs
+`.github/workflows/review-cron.yml` calls the endpoint daily and can
+be run by hand from the Actions tab.
+
+Do not trust the nominal time. GitHub delays scheduled runs, and on
+this repository the delay has been **six to seven hours, every day**:
+a 03:30 UTC schedule fired at 10:00, 10:10, 10:45, 10:46 and 11:07, so
+requests arrived around 16:00 IST rather than 09:00. The schedule is
+off `:30` and `:00` because those are the congested minutes, but the
+delay is GitHub's to give. A deployment that needs the message to
+arrive at a known hour needs a different scheduler, not a different
+cron line.
+
+The nominal time is deliberately NOT wound back to compensate: a run
+that is not delayed sends immediately, so scheduling for the delay
+would message customers in the middle of the night on any day GitHub
+happens to be punctual. It needs
 `AUTOMATION_CRON_SECRET` as a repository secret, matching the app's own
 environment variable of the same name — the same secret the automation
 and flow crons use, so this is one more URL rather than one more
