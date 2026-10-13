@@ -59,14 +59,44 @@ describe('sanitizeNext', () => {
 });
 
 describe('isAllowedErpRole', () => {
-  it('accepts the four ERP roles, in any casing', () => {
-    for (const role of ['admin', 'Owner', 'CompanyAdmin', 'MANAGER']) {
+  it('accepts every allowed ERP role, in any casing', () => {
+    // The ERP spells one of these `CompanyAdmin` and the rest
+    // lowercase; a casing change on their side must not lock a whole
+    // shop out.
+    for (const role of [
+      'admin',
+      'Owner',
+      'CompanyAdmin',
+      'MANAGER',
+      'store',
+      'Staff',
+    ]) {
       expect(isAllowedErpRole(role)).toBe(true);
     }
   });
 
+  it('lets the shop counter in', () => {
+    // Each branch has one CRM login reached from the ERP's CRM tab.
+    // What that login can SEE is not decided here — it is the CRM
+    // member this email matches, their store, and
+    // `can_access_contact` underneath. This gate only decides who
+    // may attempt a sign-in.
+    expect(isAllowedErpRole('store')).toBe(true);
+    expect(isAllowedErpRole('staff')).toBe(true);
+  });
+
   it('refuses anything else', () => {
+    // The ERP has roles with no business in a customer-messaging
+    // tool, and the token saying so is not a reason to trust it.
     for (const role of ['cashier', 'optometrist', 'viewer', '', null, 7]) {
+      expect(isAllowedErpRole(role)).toBe(false);
+    }
+  });
+
+  it('refuses a role that merely contains an allowed one', () => {
+    // `storekeeper` is not `store`, and a substring match here would
+    // be a quiet way to widen the gate.
+    for (const role of ['storekeeper', 'ex-staff', 'staffing', 'nonadmin']) {
       expect(isAllowedErpRole(role)).toBe(false);
     }
   });
