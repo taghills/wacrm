@@ -40,6 +40,18 @@ export const ALLOWED_ERP_ROLES = [
   'owner',
   'companyadmin',
   'manager',
+  // The shop counter. Each branch has one CRM login, and the people
+  // on that till reach it from the ERP's CRM tab rather than keeping
+  // a second password.
+  //
+  // Widening this list grants less than it looks like. It decides
+  // who may ATTEMPT a sign-in; what they can then see is decided by
+  // the CRM member this email matches — their account_role and their
+  // store_id — and by `can_access_contact` underneath that. An ERP
+  // role of `store` cannot let someone read another branch's chats,
+  // and it cannot create a member who does not already exist.
+  'store',
+  'staff',
 ] as const;
 
 export interface ErpSsoPayload {

@@ -469,7 +469,18 @@ inside its iframe. The token is base64url JSON plus a base64url HMAC of
 the payload part, valid for 60 seconds.
 
 Checks, in order: signature, then expiry, then ERP role (`admin`,
-`owner`, `CompanyAdmin`, `manager`), then **CRM membership**.
+`owner`, `CompanyAdmin`, `manager`, `store`, `staff`), then **CRM
+membership**.
+
+The role list decides who may ATTEMPT a sign-in, not what they can
+see. What a signed-in person reaches is decided entirely by the CRM
+member their email matches — that member's `account_role` and
+`store_id`, and `can_access_contact` (migration 043) underneath. An
+ERP role of `store` therefore cannot read another branch's chats and
+cannot conjure a member who does not already exist. That is why
+`store` and `staff` could be added for the shop counters without
+widening anything: each branch's till signs in as its own CRM member
+and sees its own store.
 
 That last one is a deliberate departure from the original handover,
 which said to create the CRM user if none exists. Creating one here
