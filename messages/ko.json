@@ -2212,6 +2212,9 @@
       "payment_received": "결제 완료",
       "ping": "테스트",
       "customer_upsert": "연락처 동기화"
-    }
+    },
+    "searchPlaceholder": "청구서 번호 또는 사유로 검색",
+    "searchLabel": "메시지 검색",
+    "noDeliveryYet": "전달됨과 읽음은 WhatsApp이 보고하는 대로 채워집니다. 이 화면이 생기기 전에 보낸 메시지에는 전달 기록이 없습니다."
   }
 }

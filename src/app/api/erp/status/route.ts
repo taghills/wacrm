@@ -221,10 +221,28 @@ const INVENTORY_TABLES = [
   'profiles',
   'contacts',
   'conversations',
-  'messages',
   'stores',
   'whatsapp_config',
 ] as const;
+
+/**
+ * `messages` is counted separately because it has NO `account_id`:
+ * it hangs off `conversations` (migration 001), so the account
+ * filter every other table uses matched nothing and this reported
+ * `messages: 0` for an account with thousands. A zero next to a
+ * healthy conversation count reads as "the CRM has lost its
+ * messages", which is alarming and was never true.
+ */
+async function messageCount(
+  admin: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+): Promise<number> {
+  const { count } = await admin
+    .from('messages')
+    .select('id, conversations!inner(account_id)', { count: 'exact', head: true })
+    .eq('conversations.account_id', accountId);
+  return count ?? 0;
+}
 
 /** Guard against a pathological account list; two is the expected case. */
 const MAX_ACCOUNTS = 10;
@@ -248,6 +266,7 @@ async function accountInventory(
         .eq('account_id', account.id);
       counts[table] = count ?? 0;
     }
+    counts.messages = await messageCount(admin, account.id as string);
     // Who is in it. Enough to recognise which login owns which
     // account when someone has signed up twice and cannot tell the
     // two apart — the case this was written for.

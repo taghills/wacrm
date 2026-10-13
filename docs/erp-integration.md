@@ -342,6 +342,20 @@ admin-only: they are deployment diagnostics, not one shop's business.
 `ping` and `customer.upsert` are left off the list entirely. A
 contact sync is not a message that failed to arrive.
 
+The search box matches the **reason** and the **bill number**
+(`erp_events.order_ref`, migration 056 — the bill no, else the ERP's
+order id, the same key the review queue uses). Both are columns on
+`erp_events`, so the database filters and the page limit still means
+what it says.
+
+**Delivered and Read fill in over time, and only for messages sent
+after migration 055.** They come from Meta's status webhook, which
+updates `messages` by Meta's own id a moment after the send; the
+ledger row joins to that message through `message_id`. Rows written
+before that column existed have none, so they can never show more
+than "sent" — which is not a fault to fix but a history that was
+never recorded.
+
 ## The send gate — running a trial on one branch
 
 `ERP_SEND_ONLY_BRANCHES` limits which branches may actually send a

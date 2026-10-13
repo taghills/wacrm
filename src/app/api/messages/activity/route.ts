@@ -56,7 +56,7 @@ export async function GET(request: Request) {
   let query = ctx.supabase
     .from('erp_events')
     .select(
-      'event_id, event_type, status, detail, branch, received_at, contact_id, ' +
+      'event_id, event_type, status, detail, branch, order_ref, received_at, contact_id, ' +
         'contacts(name), messages(status, error_title, error_details)',
     )
     .eq('account_id', ctx.accountId)
@@ -68,6 +68,22 @@ export async function GET(request: Request) {
 
   if (branchFilter) query = query.eq('branch', branchFilter);
   if (since) query = query.gte('received_at', since);
+
+  // Free text over the two columns that answer a real question: the
+  // REASON ("show me everything held back") and the BILL NUMBER
+  // ("what happened to BDGR-2627-SO-0014"). Both are on this table,
+  // so the database does the filtering and the page limit still
+  // means what it says.
+  //
+  // The commas and parentheses of PostgREST's `or` are syntax, so a
+  // search containing one would otherwise be read as more filters.
+  // Stripping them loses a little precision and cannot be turned
+  // into a query the caller did not intend.
+  const search = (url.searchParams.get('q') ?? '').trim().replace(/[(),*]/g, ' ');
+  if (search) {
+    const like = `%${search}%`;
+    query = query.or(`detail.ilike.${like},order_ref.ilike.${like}`);
+  }
 
   const { data, error } = await query;
   if (error) {
@@ -96,6 +112,7 @@ export async function GET(request: Request) {
       erpStatus: String(row.status ?? ''),
       detail: (row.detail as string | null) ?? null,
       branch: (row.branch as string | null) ?? null,
+      orderRef: (row.order_ref as string | null) ?? null,
       receivedAt: String(row.received_at ?? ''),
       contactId: (row.contact_id as string | null) ?? null,
       contactName: (contact?.name as string | null) ?? null,

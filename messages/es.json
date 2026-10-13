@@ -2212,6 +2212,9 @@
       "payment_received": "Pago recibido",
       "ping": "Prueba",
       "customer_upsert": "Sincronización de contacto"
-    }
+    },
+    "searchPlaceholder": "Buscar por número de factura o motivo",
+    "searchLabel": "Buscar mensajes",
+    "noDeliveryYet": "Entregado y Leído se completan según WhatsApp informa. Los mensajes enviados antes de esta pantalla no tienen registro de entrega."
   }
 }

@@ -14,7 +14,7 @@
 // their own store's rows and an owner gets all four shops.
 // ============================================================
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -25,6 +25,7 @@ import {
   Loader2,
   MinusCircle,
   RefreshCw,
+  Search,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,19 @@ export default function MessageActivityPage() {
   const [loading, setLoading] = useState(true);
   const [outcome, setOutcome] = useState<ActivityOutcome | null>(null);
   const [branch, setBranch] = useState<string | null>(null);
+  // `search` is what the box shows; `query` is what has been sent.
+  // Split so typing does not fire a request per keystroke.
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => setQuery(search.trim()), 300);
+    return () => {
+      if (debounce.current) clearTimeout(debounce.current);
+    };
+  }, [search]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,6 +89,7 @@ export default function MessageActivityPage() {
       const params = new URLSearchParams({ since: defaultSince() });
       if (outcome) params.set("outcome", outcome);
       if (branch) params.set("branch", branch);
+      if (query) params.set("q", query);
       const res = await fetch(`/api/messages/activity?${params}`);
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error ?? "failed");
@@ -84,7 +99,7 @@ export default function MessageActivityPage() {
     } finally {
       setLoading(false);
     }
-  }, [outcome, branch, t]);
+  }, [outcome, branch, query, t]);
 
   useEffect(() => {
     void load();
@@ -112,6 +127,18 @@ export default function MessageActivityPage() {
           <RefreshCw className={cn("size-4", loading && "animate-spin")} />
           <span className="sr-only">{t("refresh")}</span>
         </Button>
+      </div>
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t("searchPlaceholder")}
+          aria-label={t("searchLabel")}
+          className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+        />
       </div>
 
       {/* Counts first. The point of the screen is that "3 failed"
@@ -201,6 +228,14 @@ export default function MessageActivityPage() {
                     <span className="font-medium text-foreground">
                       {entry.contactName || t("unknownCustomer")}
                     </span>
+                    {/* The bill number is what both sides of the
+                        conversation are holding — the customer has
+                        it on paper, the staff member types it in. */}
+                    {entry.orderRef && (
+                      <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                        {entry.orderRef}
+                      </span>
+                    )}
                     <span className="text-xs text-muted-foreground">
                       {/* next-intl reads a dot as a path separator,
                           so the catalogue spells the event types
@@ -238,6 +273,14 @@ export default function MessageActivityPage() {
           {t("truncated")}
         </p>
       )}
+
+      {/* Said once, at the bottom, because "why is Delivered always
+          zero" is otherwise a bug report. WhatsApp reports delivery
+          back a moment after the send; rows written before this
+          screen existed were never linked to a message at all. */}
+      <p className="text-center text-xs text-muted-foreground">
+        {t("noDeliveryYet")}
+      </p>
     </div>
   );
 }
