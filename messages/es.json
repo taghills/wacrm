@@ -2063,7 +2063,9 @@
     "creating": "Creando cuenta...",
     "submit": "Crear cuenta",
     "haveAccount": "¿Ya tienes una cuenta?",
-    "signIn": "Iniciar sesión"
+    "signIn": "Iniciar sesión",
+    "inviteOnlyTitle": "Necesitas un enlace de invitación",
+    "inviteOnlyDesc": "Este CRM es solo por invitación. Pide a quien lo administra que te envíe un enlace y ábrelo para crear tu cuenta."
   },
   "ForgotPasswordPage": {
     "checkEmailTitle": "Revisa tu correo",

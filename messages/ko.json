@@ -2063,7 +2063,9 @@
     "creating": "계정 만드는 중...",
     "submit": "계정 만들기",
     "haveAccount": "이미 계정이 있으신가요?",
-    "signIn": "로그인"
+    "signIn": "로그인",
+    "inviteOnlyTitle": "초대 링크가 필요합니다",
+    "inviteOnlyDesc": "이 CRM은 초대 전용입니다. 관리자에게 링크를 요청한 뒤 그 링크로 계정을 만드세요."
   },
   "ForgotPasswordPage": {
     "checkEmailTitle": "이메일을 확인하세요",

@@ -2063,7 +2063,9 @@
     "creating": "Criando conta...",
     "submit": "Criar conta",
     "haveAccount": "Já tem uma conta?",
-    "signIn": "Entrar"
+    "signIn": "Entrar",
+    "inviteOnlyTitle": "Você precisa de um link de convite",
+    "inviteOnlyDesc": "Este CRM é apenas por convite. Peça a quem o administra que envie um link e abra esse link para criar sua conta."
   },
   "ForgotPasswordPage": {
     "checkEmailTitle": "Verifique seu e-mail",
