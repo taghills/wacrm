@@ -171,8 +171,22 @@ value saved in Settings wins.
 
 **Nothing in this app is scheduled**, and Hostinger's Node app hosting
 has no cron of its own, so the clock lives in GitHub Actions:
-`.github/workflows/review-cron.yml` calls the endpoint daily at 03:30
-UTC (09:00 IST) and can be run by hand from the Actions tab. It needs
+`.github/workflows/review-cron.yml` calls the endpoint daily and can
+be run by hand from the Actions tab.
+
+Do not trust the nominal time. GitHub delays scheduled runs, and on
+this repository the delay has been **six to seven hours, every day**:
+a 03:30 UTC schedule fired at 10:00, 10:10, 10:45, 10:46 and 11:07, so
+requests arrived around 16:00 IST rather than 09:00. The schedule is
+off `:30` and `:00` because those are the congested minutes, but the
+delay is GitHub's to give. A deployment that needs the message to
+arrive at a known hour needs a different scheduler, not a different
+cron line.
+
+The nominal time is deliberately NOT wound back to compensate: a run
+that is not delayed sends immediately, so scheduling for the delay
+would message customers in the middle of the night on any day GitHub
+happens to be punctual. It needs
 `AUTOMATION_CRON_SECRET` as a repository secret, matching the app's own
 environment variable of the same name — the same secret the automation
 and flow crons use, so this is one more URL rather than one more
@@ -294,6 +308,39 @@ batches of 100 concurrently; if one request times out mid-batch, the
 events already recorded stay recorded, and the retry redoes only the
 rest. A timeout costs time, never a duplicate contact or a duplicate
 message.
+
+## Message activity — the screen staff read
+
+`/message-activity` lists every automatic message and what became of
+it, newest first, with a count per outcome so "3 failed today" is
+visible without reading the list.
+
+It exists because the answer was split in two and neither half was a
+screen. `erp_events` knows WHY the CRM did or did not send — held
+back by the gate, a store with no phone number, a branch matching no
+store, a template not approved. `messages` knows what META did once
+it was sent. The inbox shows the second half, one conversation at a
+time, so "the customer says they got nothing" meant finding the
+contact and scrolling, and nothing at all answered "what failed
+today".
+
+Migration 055 joins them: `erp_events.message_id` holds OUR
+`messages.id` (not Meta's — migration 009 records that Meta's repeat
+across phone numbers), and `erp_events.branch` stores the branch the
+ERP named, because a contact can belong to several stores and
+`contact_stores` therefore cannot say which shop a given message was
+about.
+
+**Who sees what is the database's decision.** The route reads as the
+signed-in user, and migration 055's policy is the same boundary the
+rest of the customer data uses: an owner or admin sees the whole
+account, an agent sees only rows whose customer their store can
+access (`can_access_contact`, migration 043). Rows with no contact —
+`ping`, an unresolved customer, a branch that matched no store — stay
+admin-only: they are deployment diagnostics, not one shop's business.
+
+`ping` and `customer.upsert` are left off the list entirely. A
+contact sync is not a message that failed to arrive.
 
 ## The send gate — running a trial on one branch
 

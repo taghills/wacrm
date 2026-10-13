@@ -39,7 +39,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configuración",
-    "menuSignOut": "Cerrar sesión"
+    "menuSignOut": "Cerrar sesión",
+    "messageActivity": "Actividad de mensajes"
   },
   "Header": {
     "dashboard": "Panel",
@@ -1805,7 +1806,8 @@
         "settings_stores": "Tiendas",
         "settings_members": "Miembros del equipo",
         "settings_roles": "Roles y acceso",
-        "settings_api": "Claves de API"
+        "settings_api": "Claves de API",
+        "message-activity": "Actividad de mensajes"
       }
     },
     "sectionHiddenTitle": "No disponible",
@@ -2182,5 +2184,34 @@
   },
   "DashboardShell": {
     "loading": "Cargando..."
+  },
+  "MessageActivity": {
+    "title": "Actividad de mensajes",
+    "description": "Cada mensaje automático y qué pasó con él.",
+    "refresh": "Actualizar",
+    "empty": "No hay mensajes en los últimos 7 días.",
+    "truncated": "Mostrando solo los mensajes más recientes. Ajusta los filtros para ver el resto.",
+    "allBranches": "Todas las sucursales",
+    "unknownCustomer": "Cliente desconocido",
+    "loadError": "No se pudo cargar la actividad de mensajes",
+    "outcome": {
+      "failed": "Fallido",
+      "not_sent": "No enviado",
+      "sent": "Enviado",
+      "delivered": "Entregado",
+      "read": "Leído"
+    },
+    "event": {
+      "order_created": "Confirmación de pedido",
+      "order_ready": "Listo para recoger",
+      "order_delivered": "Entregado",
+      "order_sold": "Venta en mostrador",
+      "order_review": "Solicitud de reseña",
+      "customer_recall": "Recordatorio de revisión visual",
+      "customer_birthday": "Cumpleaños",
+      "payment_received": "Pago recibido",
+      "ping": "Prueba",
+      "customer_upsert": "Sincronización de contacto"
+    }
   }
 }

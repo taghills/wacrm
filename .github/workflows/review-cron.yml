@@ -11,9 +11,22 @@ name: Send due review requests
 # 03:30 UTC is 09:00 in India: a review request should arrive during
 # shop hours, not at midnight.
 #
-# GitHub delays scheduled runs under load, sometimes by tens of
-# minutes. That is fine for a daily job and would not be for a
-# minute-accurate one.
+# GitHub delays scheduled runs under load. On this repository the
+# observed delay has been SIX TO SEVEN HOURS, every day, not the tens
+# of minutes the docs suggest: nominal 03:30 UTC has fired at 10:00,
+# 10:10, 10:45, 10:46 and 11:07. So review requests have been arriving
+# around 16:00 IST rather than 09:00.
+#
+# The minute is off :30 and :00 because those are the congested ones —
+# everybody schedules there. It may not help much; the delay is
+# GitHub's to give.
+#
+# The nominal time stays in the MORNING rather than being wound back
+# to compensate. A run that is not delayed sends immediately, so
+# scheduling at 21:00 UTC to land at 09:00 IST would message customers
+# at 02:30 IST on any day GitHub happens to be on time. Both ends of
+# the current range — 09:00 IST on time, ~16:00 IST delayed — are
+# inside shop hours. Guessing at the delay is not.
 #
 # Caveat worth knowing: GitHub disables scheduled workflows in a
 # repository with no activity for 60 days, and says so by email. If
@@ -23,7 +36,7 @@ name: Send due review requests
 
 on:
   schedule:
-    - cron: '30 3 * * *'
+    - cron: '7 3 * * *'
   # So you can run it by hand from the Actions tab to test it, without
   # waiting for tomorrow.
   workflow_dispatch:
@@ -32,6 +45,9 @@ jobs:
   drain:
     name: Drain the review queue
     runs-on: ubuntu-latest
+    # Three attempts at up to five minutes each, plus the waits
+    # between. Bounded so a wedged request cannot sit on a runner.
+    timeout-minutes: 20
 
     steps:
       - name: Call the review cron
@@ -53,9 +69,24 @@ jobs:
           # -sS keeps curl quiet but still prints real errors.
           # The body and status are captured separately so a failure
           # reports what the endpoint actually said.
+          #
+          # The retries are not belt-and-braces. On 11 Oct 2026 this
+          # job failed with
+          #   curl: (28) Failed to connect to wa.taghills.com port 443
+          # after the host was unreachable for 4.5 minutes, and every
+          # review request due that day waited until the next run —
+          # a day late, for a blip. Draining is idempotent (a row is
+          # claimed before it is sent), so a retry cannot double-send.
+          #
+          # --max-time is per attempt, and --retry-connrefused covers
+          # the refused-connection case curl does not count as
+          # transient by default.
           response=$(mktemp)
           status=$(curl -sS -o "${response}" -w '%{http_code}' \
             --max-time 300 \
+            --retry 2 \
+            --retry-delay 30 \
+            --retry-connrefused \
             -H "x-cron-secret: ${CRON_SECRET}" \
             https://wa.taghills.com/api/erp/review/cron)
 
