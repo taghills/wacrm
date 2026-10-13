@@ -122,7 +122,7 @@ function SignupForm() {
       ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
       : undefined;
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -136,6 +136,24 @@ function SignupForm() {
     if (error) {
       setError(error.message);
       setLoading(false);
+      return;
+    }
+
+    // A session here means this project has email confirmation
+    // switched OFF: Supabase signed the person in on the spot and
+    // there is no email coming. Showing "check your email" anyway —
+    // which this did, because it read only `error` — left every new
+    // member waiting for a message that would never arrive, on an
+    // account that was already working.
+    //
+    // Full-page navigation, not router.push, for the reason the login
+    // page spells out: a soft navigation can reach the protected
+    // route before the server observes the just-written auth cookies,
+    // and the middleware bounces it back to /login.
+    if (data.session) {
+      window.location.href = inviteToken
+        ? `/join/${encodeURIComponent(inviteToken)}`
+        : "/dashboard";
       return;
     }
 
