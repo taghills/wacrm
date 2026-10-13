@@ -200,6 +200,12 @@ export async function POST(request: Request) {
         status: outcome.status,
         detail: outcome.detail?.slice(0, 500) ?? null,
         contact_id: outcome.contactId ?? null,
+        // Both for the Message activity screen: the branch is what
+        // its filter reads (a contact can belong to several stores,
+        // so the order's own branch is the only honest answer), and
+        // the message id is its join to what Meta did afterwards.
+        branch: outcome.branch ?? null,
+        message_id: outcome.messageId ?? null,
         received_at: new Date().toISOString(),
       },
       { onConflict: 'account_id,event_id' },

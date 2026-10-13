@@ -97,6 +97,14 @@ export interface ErpEventOutcome {
    * and the ERP's report must not call those sent.
    */
   whatsappMessageId?: string;
+  /**
+   * OUR `messages.id` for that message — the ledger's join to what
+   * Meta did with it afterwards. Not Meta's id: migration 009 records
+   * that Meta's repeat across phone numbers, so they cannot be a key.
+   */
+  messageId?: string;
+  /** The branch the ERP named, for the activity screen's filter. */
+  branch?: string | null;
 }
 
 /**
@@ -613,6 +621,7 @@ export async function processErpEvent(
       status: 'done',
       detail: withNote('contact synced', note),
       contactId: contact.id,
+      branch,
     };
   }
 
@@ -627,6 +636,7 @@ export async function processErpEvent(
       status: 'skipped',
       detail: withNote(gate.reason, note),
       contactId: contact.id,
+      branch,
     };
   }
 
@@ -635,6 +645,7 @@ export async function processErpEvent(
       status: 'skipped',
       detail: withNote('contact opted out of marketing', note),
       contactId: contact.id,
+      branch,
     };
   }
 
@@ -654,6 +665,7 @@ export async function processErpEvent(
         note,
       ),
       contactId: contact.id,
+      branch,
     };
   }
 
@@ -694,6 +706,7 @@ export async function processErpEvent(
         note,
       ),
       contactId: contact.id,
+      branch,
     };
   }
 
@@ -712,6 +725,7 @@ export async function processErpEvent(
   );
 
   let whatsappMessageId: string | undefined;
+  let messageId: string | undefined;
   try {
     const sendResult = await sendMessageToConversation(ctx.db, ctx.accountId, {
       conversationId,
@@ -728,6 +742,7 @@ export async function processErpEvent(
       ),
     });
     whatsappMessageId = sendResult.whatsappMessageId ?? undefined;
+    messageId = sendResult.messageId ?? undefined;
   } catch (err) {
     // Meta's own errors name neither the template nor the attachment:
     // "(#132001) Template name does not exist in the translation" is
@@ -757,6 +772,8 @@ export async function processErpEvent(
     ),
     contactId: contact.id,
     whatsappMessageId,
+    messageId,
+    branch,
   };
 }
 

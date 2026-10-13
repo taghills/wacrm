@@ -39,7 +39,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configurações",
-    "menuSignOut": "Sair"
+    "menuSignOut": "Sair",
+    "messageActivity": "Atividade de mensagens"
   },
   "Header": {
     "dashboard": "Painel",
@@ -1805,7 +1806,8 @@
         "settings_stores": "Lojas",
         "settings_members": "Membros da equipa",
         "settings_roles": "Funções e acesso",
-        "settings_api": "Chaves de API"
+        "settings_api": "Chaves de API",
+        "message-activity": "Atividade de mensagens"
       }
     },
     "sectionHiddenTitle": "Não disponível",
@@ -2182,5 +2184,34 @@
   },
   "DashboardShell": {
     "loading": "Carregando..."
+  },
+  "MessageActivity": {
+    "title": "Atividade de mensagens",
+    "description": "Cada mensagem automática e o que aconteceu com ela.",
+    "refresh": "Atualizar",
+    "empty": "Nenhuma mensagem nos últimos 7 dias.",
+    "truncated": "Mostrando apenas as mensagens mais recentes. Ajuste os filtros para ver o restante.",
+    "allBranches": "Todas as filiais",
+    "unknownCustomer": "Cliente desconhecido",
+    "loadError": "Não foi possível carregar a atividade de mensagens",
+    "outcome": {
+      "failed": "Falhou",
+      "not_sent": "Não enviada",
+      "sent": "Enviada",
+      "delivered": "Entregue",
+      "read": "Lida"
+    },
+    "event": {
+      "order_created": "Confirmação do pedido",
+      "order_ready": "Pronto para retirada",
+      "order_delivered": "Entregue",
+      "order_sold": "Venda no balcão",
+      "order_review": "Pedido de avaliação",
+      "customer_recall": "Lembrete de exame de vista",
+      "customer_birthday": "Aniversário",
+      "payment_received": "Pagamento recebido",
+      "ping": "Teste",
+      "customer_upsert": "Sincronização de contato"
+    }
   }
 }

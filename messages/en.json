@@ -39,7 +39,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Profile",
     "menuSettings": "Settings",
-    "menuSignOut": "Sign out"
+    "menuSignOut": "Sign out",
+    "messageActivity": "Message activity"
   },
   "Header": {
     "dashboard": "Dashboard",
@@ -1805,7 +1806,8 @@
         "settings_stores": "Stores",
         "settings_members": "Team members",
         "settings_roles": "Roles & access",
-        "settings_api": "API keys"
+        "settings_api": "API keys",
+        "message-activity": "Message activity"
       }
     },
     "sectionHiddenTitle": "Not available",
@@ -2182,5 +2184,34 @@
   },
   "DashboardShell": {
     "loading": "Loading..."
+  },
+  "MessageActivity": {
+    "title": "Message activity",
+    "description": "Every automatic message and what became of it.",
+    "refresh": "Refresh",
+    "empty": "No messages in the last 7 days.",
+    "truncated": "Showing the most recent messages only. Narrow the filters to see the rest.",
+    "allBranches": "All branches",
+    "unknownCustomer": "Unknown customer",
+    "loadError": "Could not load the message activity",
+    "outcome": {
+      "failed": "Failed",
+      "not_sent": "Not sent",
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read"
+    },
+    "event": {
+      "order_created": "Order confirmation",
+      "order_ready": "Ready to collect",
+      "order_delivered": "Delivered",
+      "order_sold": "Counter sale",
+      "order_review": "Review request",
+      "customer_recall": "Eye-test recall",
+      "customer_birthday": "Birthday",
+      "payment_received": "Payment received",
+      "ping": "Test",
+      "customer_upsert": "Contact sync"
+    }
   }
 }

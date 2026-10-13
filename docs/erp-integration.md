@@ -309,6 +309,39 @@ events already recorded stay recorded, and the retry redoes only the
 rest. A timeout costs time, never a duplicate contact or a duplicate
 message.
 
+## Message activity — the screen staff read
+
+`/message-activity` lists every automatic message and what became of
+it, newest first, with a count per outcome so "3 failed today" is
+visible without reading the list.
+
+It exists because the answer was split in two and neither half was a
+screen. `erp_events` knows WHY the CRM did or did not send — held
+back by the gate, a store with no phone number, a branch matching no
+store, a template not approved. `messages` knows what META did once
+it was sent. The inbox shows the second half, one conversation at a
+time, so "the customer says they got nothing" meant finding the
+contact and scrolling, and nothing at all answered "what failed
+today".
+
+Migration 055 joins them: `erp_events.message_id` holds OUR
+`messages.id` (not Meta's — migration 009 records that Meta's repeat
+across phone numbers), and `erp_events.branch` stores the branch the
+ERP named, because a contact can belong to several stores and
+`contact_stores` therefore cannot say which shop a given message was
+about.
+
+**Who sees what is the database's decision.** The route reads as the
+signed-in user, and migration 055's policy is the same boundary the
+rest of the customer data uses: an owner or admin sees the whole
+account, an agent sees only rows whose customer their store can
+access (`can_access_contact`, migration 043). Rows with no contact —
+`ping`, an unresolved customer, a branch that matched no store — stay
+admin-only: they are deployment diagnostics, not one shop's business.
+
+`ping` and `customer.upsert` are left off the list entirely. A
+contact sync is not a message that failed to arrive.
+
 ## The send gate — running a trial on one branch
 
 `ERP_SEND_ONLY_BRANCHES` limits which branches may actually send a
