@@ -221,25 +221,6 @@ export function formatMoney(value: unknown, currency = 'INR'): string {
 }
 
 /**
- * Dates, as they appear inside a template variable: "5 Oct 2026".
- *
- * Returns the raw string unchanged if it is not a parseable date, so
- * an ERP that starts sending "next week" degrades to showing that
- * rather than "Invalid Date".
- */
-export function formatDate(value: unknown): string {
-  if (typeof value !== 'string' || value.trim().length === 0) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'Asia/Kolkata',
-  }).format(parsed);
-}
-
-/**
  * Make a string safe to pass as a WhatsApp template variable.
  *
  * Meta rejects a send whose parameter contains a newline, a tab, or
@@ -254,8 +235,8 @@ export function formatDate(value: unknown): string {
  * Meta rejects an empty text parameter with "(#131008) Required
  * parameter is missing" — it does not distinguish a blank value from
  * an absent one. A live demo order failed exactly this way: the order
- * had no expected delivery date, `formatDate` correctly returned '',
- * and the whole message was refused over one missing field.
+ * had no expected delivery date, the date formatter correctly returned
+ * '', and the whole message was refused over one missing field.
  *
  * Every parameter now carries a fallback, so a gap in the ERP's data
  * costs the customer one vague line rather than the entire message.
@@ -444,9 +425,6 @@ export function templatePlanFor(
         formatMoney(data.grandTotal, currency),
         formatMoney(data.paid, currency),
         formatMoney(data.balance, currency),
-        // An order without a promised date is normal; refusing to send
-        // the confirmation over it is not.
-        orFallback(sanitizeParam(formatDate(data.deliveryDate)), 'To be confirmed'),
         phone,
       ];
       // Two approved templates, identical wording, differing only in
@@ -462,9 +440,9 @@ export function templatePlanFor(
     }
 
     case 'order.sold': {
-      // No delivery date and no balance: both are answered by the
-      // customer standing at the counter, and `Balance: ₹0` on a
-      // paid-in-full sale reads like a mistake.
+      // No balance line: it is answered by the customer standing at
+      // the counter, and `Balance: ₹0` on a paid-in-full sale
+      // reads like a mistake.
       const params = [
         name,
         orFallback(branch, 'TAGHills'),
