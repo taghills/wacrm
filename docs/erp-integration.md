@@ -41,8 +41,8 @@ event will deliver:
 
 | Event | Template | Body variables, in order |
 |---|---|---|
-| `order.created` | `order_confirmation` | name, branch, bill no, total, paid, balance, delivery date, branch phone |
-| `order.created` + PDF | `order_confirmation_doc` | the same eight, plus a receipt PDF header |
+| `order.created` | `order_confirmation` | name, branch, bill no, total, paid, balance, branch phone |
+| `order.created` + PDF | `order_confirmation_doc` | the same seven, plus a receipt PDF header |
 | `order.ready` | `order_ready` | name, bill no, branch, balance, branch phone |
 | `order.delivered` | `order_delivered` | name, bill no, branch, branch phone |
 | `order.delivered` + PDF | `order_delivered_invoice` | the same four, plus an invoice PDF header |
@@ -81,9 +81,9 @@ seconds apart on the customer's phone, the first promising to tell
 them when their purchase was "ready for collection" — for something
 already in their bag.
 
-Its template carries no delivery date and no balance: both are
-answered by the customer standing at the counter, and `Balance: ₹0` on
-a paid-in-full sale reads like a mistake.
+Its template carries no balance: it is answered by the customer
+standing at the counter, and `Balance: ₹0` on a paid-in-full sale
+reads like a mistake.
 
 It queues a review request, exactly as a delivery does. Keying that on
 `order.delivered` alone would have asked every spectacles customer and

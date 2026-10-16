@@ -4,7 +4,6 @@ import {
   extractBranch,
   extractBranchReviewUrl,
   extractCustomer,
-  formatDate,
   formatMoney,
   isKnownEventType,
   isMarketingEvent,
@@ -29,7 +28,6 @@ const orderData = {
   grandTotal: 4500,
   paid: 2000,
   balance: 2500,
-  deliveryDate: '2026-10-05',
 };
 
 const event = (type: string, data: Record<string, unknown>): ErpEvent => ({
@@ -179,21 +177,6 @@ describe('formatMoney', () => {
   });
 });
 
-describe('formatDate', () => {
-  it('renders an ISO date readably', () => {
-    expect(formatDate('2026-10-05')).toBe('5 Oct 2026');
-  });
-
-  it('passes an unparseable value through unchanged', () => {
-    expect(formatDate('next week')).toBe('next week');
-  });
-
-  it('is empty for nothing', () => {
-    expect(formatDate(null)).toBe('');
-    expect(formatDate('')).toBe('');
-  });
-});
-
 describe('sanitizeParam', () => {
   it('removes the characters Meta rejects in a template variable', () => {
     // Meta 400s on newlines, tabs and 4+ consecutive spaces — which
@@ -258,7 +241,6 @@ describe('templatePlanFor', () => {
       expect.stringMatching(/4,500/),
       expect.stringMatching(/2,000/),
       expect.stringMatching(/2,500/),
-      '5 Oct 2026',
       PHONE,
     ]);
     // No PDF on this event, so the plain template, with no header.
@@ -501,17 +483,21 @@ describe('templatePlanFor', () => {
 
 describe('orFallback — no parameter is ever empty', () => {
   // A live demo order failed with "(#131008) Required parameter is
-  // missing" because the order had no expected delivery date, so
-  // {{7}} was an empty string. Meta does not distinguish a blank
+  // missing" because the order had no expected delivery date, so that
+  // variable was an empty string. Meta does not distinguish a blank
   // value from an absent one; the whole message was refused over one
-  // field.
+  // field. The date is gone from the template now, but every other
+  // parameter still carries a fallback.
 
-  it('sends a readable placeholder when the delivery date is missing', () => {
+  it('ignores a deliveryDate, which the template no longer carries', () => {
+    // The ERP dropped the field; an older ERP build that still sends
+    // it must not shift the branch phone out of {{7}}.
     const plan = templatePlanFor(
-      event('order.created', { ...orderData, deliveryDate: undefined }),
+      event('order.created', { ...orderData, deliveryDate: '2026-10-05' }),
       opts,
     );
-    expect(plan?.params[6]).toBe('To be confirmed');
+    expect(plan?.params).toHaveLength(7);
+    expect(plan?.params[6]).toBe(PHONE);
   });
 
   it('never emits an empty string for any order.created parameter', () => {
@@ -524,7 +510,7 @@ describe('orFallback — no parameter is ever empty', () => {
       }),
       opts,
     );
-    expect(plan?.params).toHaveLength(8);
+    expect(plan?.params).toHaveLength(7);
     for (const p of plan!.params) expect(p).not.toBe('');
   });
 
