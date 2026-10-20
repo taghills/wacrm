@@ -332,7 +332,10 @@ delivery uuid you can dedupe on, and `data` varies by `event`:
 
 ```jsonc
 // message.received
-{ "conversation_id": "…", "contact_id": "…", "whatsapp_message_id": "wamid.…", "content_type": "text", "text": "Hi 👋" }
+{ "conversation_id": "…", "contact_id": "…", "phone": "919999999999", "contact_name": "Asha Verma", "whatsapp_message_id": "wamid.…", "content_type": "text", "text": "Hi 👋" }
+// `phone` is digits only, no `+`, exactly as stored — and null for a
+// sender who has only a WhatsApp username. `contact_name` is null
+// until we learn one. Match on the phone, fall back to contact_id.
 // conversation.created
 { "conversation_id": "…", "contact_id": "…" }
 // message.status_updated

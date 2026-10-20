@@ -440,6 +440,43 @@ describe('inbound webhook: idempotent insert (#367)', () => {
   })
 })
 
+describe('inbound webhook: message.received names the sender', () => {
+  it('carries the phone number, not only our own uuid', async () => {
+    // The receiving system (an ERP, a helpdesk) keys customers by
+    // phone. Without it, a notification cannot say whose message
+    // arrived without first calling back into this API.
+    await runWebhook()
+
+    const call = h.dispatchWebhookEvent.mock.calls.find(
+      (c: unknown[]) => c[2] === 'message.received'
+    )
+    expect(call).toBeDefined()
+    expect(call![3]).toMatchObject({
+      contact_id: 'contact-1',
+      phone: '15551230000',
+      contact_name: 'Ada',
+    })
+  })
+
+  it('sends null, not an empty string, for a username-only sender', async () => {
+    // The contacts table stores a BSUID-only sender's phone as ''
+    // (migration 040). An empty phone field reads like a bug at the
+    // receiving end; null says "there is no number" on purpose.
+    h.state.contactByWaUserId = null
+    mockFindExistingContact.mockResolvedValue(null)
+
+    await runWebhook(USERNAME_ONLY_MESSAGE, USERNAME_ONLY_CONTACTS)
+
+    const call = h.dispatchWebhookEvent.mock.calls.find(
+      (c: unknown[]) => c[2] === 'message.received'
+    )
+    expect(call![3]).toMatchObject({
+      phone: null,
+      contact_name: 'Sheena Nelson',
+    })
+  })
+})
+
 describe('inbound webhook: atomic unread bump (#369)', () => {
   it('increments unread through the DB-side RPC, not a read-modify-write', async () => {
     await runWebhook()
