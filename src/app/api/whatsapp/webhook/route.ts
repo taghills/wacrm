@@ -998,6 +998,18 @@ async function processMessage(
   await dispatchWebhookEvent(supabaseAdmin(), accountId, 'message.received', {
     conversation_id: conversation.id,
     contact_id: contactRecord.id,
+    // Who it is, in the receiver's own terms. Every system on the
+    // other end of this webhook — an ERP, a helpdesk — keys its
+    // customers by phone number, not by our uuid, so a payload
+    // carrying only `contact_id` forces a second authenticated call
+    // back into this API before the notification can even say a name.
+    //
+    // Null rather than '' for a sender who has only a WhatsApp
+    // username (migration 040): the contacts table stores that as an
+    // empty string, and an empty string in a phone field reads like a
+    // bug at the receiving end rather than "there is no number".
+    phone: contactRecord.phone || null,
+    contact_name: contactRecord.name || null,
     whatsapp_message_id: message.id,
     content_type: contentType,
     text: contentText,
