@@ -226,6 +226,18 @@ BEGIN
     RAISE EXCEPTION 'stores.phone is missing (migration 051)';
   END IF;
 
+  -- The ERP's inbox counts (057). Every DDL statement in that
+  -- migration is CREATE OR REPLACE / IF NOT EXISTS, so a typo in the
+  -- function name would apply cleanly and surface only as a 500 from
+  -- /api/erp/inbox-counts, in production, on a till.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'erp_inbox_counts'
+  ) THEN
+    RAISE EXCEPTION 'erp_inbox_counts() is missing (migration 057)';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;
