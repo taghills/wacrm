@@ -1,7 +1,25 @@
 import { describe, it, expect } from 'vitest';
 
-import { parseInboxCountsBody, readInboxCounts } from './inbox-counts';
+import { countAwaitingReply, parseInboxCountsBody, readInboxCounts } from './inbox-counts';
 import { matchStoreByBranch } from './process';
+
+describe('countAwaitingReply', () => {
+  it('leaves out threads that end in "ok" / "thanks" / 👍', () => {
+    expect(
+      countAwaitingReply([
+        { conversation_id: 'a', content_type: 'text', content_text: 'is my order ready?' },
+        { conversation_id: 'b', content_type: 'text', content_text: 'OK MAM' },
+        { conversation_id: 'c', content_type: 'text', content_text: '🙏' },
+        { conversation_id: 'd', content_type: 'image', content_text: null },
+      ]),
+    ).toBe(2);
+  });
+
+  it('counts nothing for a missing or malformed result', () => {
+    expect(countAwaitingReply(null)).toBe(0);
+    expect(countAwaitingReply({})).toBe(0);
+  });
+});
 
 describe('parseInboxCountsBody', () => {
   it('reads a branch', () => {

@@ -546,7 +546,7 @@ reach their chat by guessing the number in the query string.
 | Field | Means |
 |---|---|
 | `unread` | conversations with an unopened incoming message |
-| `awaitingReply` | conversations whose **last** message is the customer's |
+| `awaitingReply` | conversations whose **last** message is the customer's — unless that message is only an acknowledgement ("ok", "thank you sir", 👍; see `src/lib/erp/acknowledgement.ts`). Needs migration 058; without it every such thread is still counted. |
 
 The second number is the one worth showing a till. A thread staff
 have opened and not answered is no longer bold in the inbox, so
