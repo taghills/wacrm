@@ -14,7 +14,8 @@
 // Response:  { "unread": 3, "awaitingReply": 5 }
 //
 //   unread        conversations with an unopened incoming message
-//   awaitingReply conversations whose LAST message is the customer's
+//   awaitingReply conversations whose LAST message is the customer's,
+//                 unless that message is only "ok" / "thanks" / 👍
 //
 // The second is the useful one. A thread staff have opened and not
 // answered is no longer bold in the inbox, so it is the one that
@@ -31,7 +32,7 @@ import { NextResponse } from 'next/server';
 
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import { verifyBearer, verifyEventSignature } from '@/lib/erp/signature';
-import { parseInboxCountsBody, readInboxCounts } from '@/lib/erp/inbox-counts';
+import { countAwaitingReply, parseInboxCountsBody, readInboxCounts } from '@/lib/erp/inbox-counts';
 import { matchStoreByBranch, resolveErpAccountId } from '@/lib/erp/process';
 
 /** Unauthorized, with no hint about which of the two checks failed. */
@@ -133,5 +134,24 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json(readInboxCounts(data));
+  const counts = readInboxCounts(data);
+
+  // ---- leave out "ok" / "thanks" ------------------------------
+  // Without migration 058 the function is missing: keep 057's count
+  // (every waiting thread, acknowledgements included) and say so in
+  // the log, rather than failing a badge that worked yesterday.
+  const { data: waiting, error: waitingError } = await db.rpc('erp_inbox_waiting', {
+    p_account_id: accountId,
+    p_store_id: storeId,
+  });
+  if (waitingError) {
+    console.warn(
+      '[erp/inbox-counts] erp_inbox_waiting failed (migration 058 applied?); "ok"/"thanks" threads are still counted as waiting:',
+      waitingError.message,
+    );
+  } else {
+    counts.awaitingReply = countAwaitingReply(waiting);
+  }
+
+  return NextResponse.json(counts);
 }

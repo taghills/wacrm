@@ -458,6 +458,19 @@ describe('inbound webhook: message.received names the sender', () => {
     })
   })
 
+  it('still delivers, with branch null, when the store lookup fails', async () => {
+    // This mock has no contact_stores table, so the lookup throws.
+    // The store name is a convenience: losing it must never cost the
+    // receiver the message itself.
+    await runWebhook()
+
+    const call = h.dispatchWebhookEvent.mock.calls.find(
+      (c: unknown[]) => c[2] === 'message.received'
+    )
+    expect(call).toBeDefined()
+    expect(call![3]).toMatchObject({ branch: null })
+  })
+
   it('sends null, not an empty string, for a username-only sender', async () => {
     // The contacts table stores a BSUID-only sender's phone as ''
     // (migration 040). An empty phone field reads like a bug at the

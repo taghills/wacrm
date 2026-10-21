@@ -19,6 +19,7 @@ import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
+import { contactBranchName, type ContactStoreRow } from '@/lib/webhooks/contact-branch'
 import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
@@ -1013,7 +1014,32 @@ async function processMessage(
     whatsapp_message_id: message.id,
     content_type: contentType,
     text: contentText,
+    // The shop this customer belongs to, so the receiver alerts that
+    // shop's staff. Null when there is no single answer.
+    branch: await contactBranch(contactRecord.id),
   })
+}
+
+/**
+ * The one active store a contact is linked to, for the webhook's
+ * `branch`. Never throws: a failed lookup must not cost the receiver
+ * the message itself, so it is logged and sent as null.
+ */
+async function contactBranch(contactId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabaseAdmin()
+      .from('contact_stores')
+      .select('stores(name, active)')
+      .eq('contact_id', contactId)
+    if (error) {
+      console.error('[webhook] store lookup for message.received failed:', error.message)
+      return null
+    }
+    return contactBranchName(data as ContactStoreRow[] | null)
+  } catch (err) {
+    console.error('[webhook] store lookup for message.received failed:', err)
+    return null
+  }
 }
 
 async function parseMessageContent(

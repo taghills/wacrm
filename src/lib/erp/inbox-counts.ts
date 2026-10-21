@@ -6,6 +6,8 @@
 // uses).
 // ============================================================
 
+import { isAcknowledgement } from './acknowledgement';
+
 export interface InboxCountsRequest {
   /** Branch to scope the counts to; null means the whole account. */
   branch: string | null;
@@ -14,7 +16,7 @@ export interface InboxCountsRequest {
 export interface InboxCounts {
   /** Conversations with an unopened incoming message. */
   unread: number;
-  /** Conversations whose last message is the customer's. */
+  /** Conversations whose last message is the customer's and needs an answer (not just "ok" / "thanks"). */
   awaitingReply: number;
 }
 
@@ -56,6 +58,22 @@ export function readInboxCounts(rpcResult: unknown): InboxCounts {
     unread: toCount(record.unread),
     awaitingReply: toCount(record.awaiting_reply),
   };
+}
+
+/**
+ * `awaitingReply` from the rows `erp_inbox_waiting` (migration 058)
+ * returns: conversations whose last message is the customer's, less
+ * the ones where that message is only "ok" / "thanks" / 👍.
+ */
+export function countAwaitingReply(rpcResult: unknown): number {
+  const rows = Array.isArray(rpcResult) ? rpcResult : [];
+  return rows.filter((row) => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    return !isAcknowledgement(
+      typeof r.content_type === 'string' ? r.content_type : null,
+      typeof r.content_text === 'string' ? r.content_text : null,
+    );
+  }).length;
 }
 
 function toCount(value: unknown): number {
