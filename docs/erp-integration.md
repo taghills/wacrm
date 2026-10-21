@@ -527,6 +527,45 @@ Resolution runs under the signed-in user's own RLS client, so store
 isolation applies: a staff member who may not see a customer cannot
 reach their chat by guessing the number in the query string.
 
+## Inbox counts — "how many customers are waiting?"
+
+`POST /api/erp/inbox-counts`, authenticated exactly like
+`/api/erp/events`: `Authorization: Bearer <ERP_API_KEY>` plus
+`X-ERP-Signature: sha256=<hex>` over the raw body.
+
+```jsonc
+// request — one branch
+{ "branch": "Shastri Nagar" }
+// request — the whole account (also: {} or no body at all)
+{ "branch": null }
+
+// response
+{ "unread": 3, "awaitingReply": 5 }
+```
+
+| Field | Means |
+|---|---|
+| `unread` | conversations with an unopened incoming message |
+| `awaitingReply` | conversations whose **last** message is the customer's |
+
+The second number is the one worth showing a till. A thread staff
+have opened and not answered is no longer bold in the inbox, so
+`unread` drops to zero while the customer is still waiting — which is
+exactly the conversation that gets forgotten.
+
+The branch is matched the same way an event's branch is (name or
+short code, through `normalizeStoreKey`). A branch matching no active
+store is a **400** naming it and listing the stores that do exist, not
+a 200 with zeros: a till reading "0 waiting" because two systems spell
+a shop differently is a failure this integration has already had once,
+with order messages.
+
+A contact linked to two stores counts in both branches' numbers. That
+is deliberate — both tills are genuinely waiting on that customer.
+
+Needs migration **057**, which adds the `erp_inbox_counts` function.
+Without it the endpoint answers 500 and says so.
+
 ## Rollout
 
 1. Set `ERP_API_KEY` and `ERP_SHARED_SECRET` on the CRM host, and the

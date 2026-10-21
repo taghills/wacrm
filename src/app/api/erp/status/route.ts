@@ -28,6 +28,10 @@
 import { NextResponse } from 'next/server';
 
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
+import {
+  WEBHOOK_PUBLIC_COLUMNS,
+  serializeWebhookEndpoint,
+} from '@/lib/webhooks/endpoints';
 import { maskEmail } from '@/lib/erp/mask-email';
 import { resolveErpAccountId, UNMATCHED_BRANCH } from '@/lib/erp/process';
 import { parseAllowedBranches } from '@/lib/erp/send-gate';
@@ -276,6 +280,21 @@ async function accountInventory(
       .eq('account_id', account.id)
       .order('created_at', { ascending: true });
 
+    // Outbound webhooks, per account, for the same reason as the
+    // counts above. A webhook endpoint is registered with an API
+    // key, and a key belongs to the account of whoever made it — so
+    // an endpoint can sit in a second account, perfectly valid,
+    // subscribed to an event that account never sees. Nothing is
+    // delivered and nothing is recorded as a failure. Listing them
+    // next to `whatsapp_config` makes that mismatch a glance rather
+    // than an investigation. Never the secret: WEBHOOK_PUBLIC_COLUMNS
+    // excludes it.
+    const { data: hooks } = await admin
+      .from('webhook_endpoints')
+      .select(WEBHOOK_PUBLIC_COLUMNS)
+      .eq('account_id', account.id)
+      .order('created_at', { ascending: true });
+
     rows.push({
       id: account.id,
       name: account.name,
@@ -287,6 +306,9 @@ async function accountInventory(
         role: m.account_role,
         joinedAt: m.created_at,
       })),
+      webhooks: (hooks ?? []).map((h) =>
+        serializeWebhookEndpoint(h as Record<string, unknown>),
+      ),
     });
   }
   return rows;

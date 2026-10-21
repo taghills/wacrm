@@ -482,12 +482,7 @@ export async function linkContactToBranch(
     return { linked: false, reason: `${UNMATCHED_BRANCH}${branch} (no active stores)` };
   }
 
-  const key = normalizeStoreKey(branch);
-  const match = stores.find(
-    (s) =>
-      normalizeStoreKey(String(s.name)) === key ||
-      normalizeStoreKey(String(s.code)) === key,
-  );
+  const match = matchStoreByBranch(stores, branch);
   if (!match) {
     console.warn('[erp] no store matches branch', { branch, accountId });
     return { linked: false, reason: `${UNMATCHED_BRANCH}${branch}` };
@@ -575,6 +570,32 @@ async function syncStoreReviewUrl(
 /** Lowercase, strip everything that is not a letter or a digit. */
 export function normalizeStoreKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * The store a branch name refers to, or null.
+ *
+ * The ERP spells a branch however the till spells it — 'Shastri
+ * Nagar', 'shastri-nagar', or the short code 'SHNR' — so both the
+ * name and the code are compared through `normalizeStoreKey`.
+ *
+ * An empty or punctuation-only branch matches nothing rather than
+ * the first store whose code normalises to '', which is the kind of
+ * accident that files a customer under the wrong shop.
+ */
+export function matchStoreByBranch<T extends { name?: unknown; code?: unknown }>(
+  stores: T[],
+  branch: string,
+): T | null {
+  const key = normalizeStoreKey(branch);
+  if (!key) return null;
+  return (
+    stores.find(
+      (s) =>
+        normalizeStoreKey(String(s.name ?? '')) === key ||
+        normalizeStoreKey(String(s.code ?? '')) === key,
+    ) ?? null
+  );
 }
 
 // ------------------------------------------------------------
