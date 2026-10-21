@@ -132,4 +132,54 @@ describe('dispatchWebhookEvent', () => {
     expect(calls.rpcs).toHaveLength(0);
     expect(calls.updates).toHaveLength(0);
   });
+
+  it('says so in the log when nothing was subscribed', async () => {
+    // The silence this replaces: an endpoint registered on the WRONG
+    // account looks correct from both ends — the integration is
+    // "connected", failure_count stays 0 because no delivery is ever
+    // attempted, and no customer message arrives. One greppable line
+    // naming the account is the whole diagnosis.
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn());
+
+    await dispatchWebhookEvent(
+      makeDb([], emptyCalls()),
+      'acct-1',
+      'message.received',
+      {},
+    );
+
+    expect(info).toHaveBeenCalledWith(
+      expect.stringContaining('no active endpoint subscribed to message.received'),
+    );
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('acct-1'));
+    info.mockRestore();
+  });
+
+  it('distinguishes a failed lookup from nobody being subscribed', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn());
+
+    const db = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              contains: () =>
+                Promise.resolve({ data: null, error: { message: 'boom' } }),
+            }),
+          }),
+        }),
+      }),
+      rpc: () => Promise.resolve({ data: null, error: null }),
+    } as unknown as SupabaseClient;
+
+    await dispatchWebhookEvent(db, 'acct-1', 'message.received', {});
+
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('endpoint lookup failed'),
+      expect.anything(),
+    );
+    error.mockRestore();
+  });
 });

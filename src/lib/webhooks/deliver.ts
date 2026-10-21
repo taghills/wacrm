@@ -57,7 +57,29 @@ export async function dispatchWebhookEvent(
       .eq('is_active', true)
       .contains('events', [event]);
 
-    if (error || !rows || rows.length === 0) return;
+    if (error) {
+      // A failed lookup used to be indistinguishable from "nobody is
+      // subscribed": both returned here in silence, and the endpoint's
+      // failure_count stayed at 0 because no delivery was ever
+      // attempted. Say which one it was.
+      console.error(
+        `[webhooks] endpoint lookup failed for ${event} on account ${accountId}:`,
+        error,
+      );
+      return;
+    }
+    if (!rows || rows.length === 0) {
+      // Not an error — most accounts have no endpoints. But it is the
+      // only trace of a webhook that was registered on the WRONG
+      // account: the integration looks correct from both ends, and
+      // nothing is ever delivered or recorded as failed. One line
+      // naming the account turns a silent no-op into something
+      // greppable.
+      console.info(
+        `[webhooks] no active endpoint subscribed to ${event} on account ${accountId}`,
+      );
+      return;
+    }
 
     // Sign the exact bytes we send so a receiver can recompute the
     // HMAC over the raw request body. `id` is a per-delivery uuid the
