@@ -165,6 +165,8 @@
       "showContact": "Show contact",
       "refresh": "Refresh",
       "refreshConversation": "Refresh conversation",
+      "markUnread": "Mark as unread",
+      "markedUnread": "Marked as unread — the chat shows as not opened for everyone",
       "status": "Status",
       "statusOpen": "Open",
       "statusPending": "Pending",

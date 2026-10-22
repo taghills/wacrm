@@ -165,6 +165,8 @@
       "showContact": "Mostrar contato",
       "refresh": "Atualizar",
       "refreshConversation": "Atualizar conversa",
+      "markUnread": "Marcar como não lida",
+      "markedUnread": "Marcada como não lida — a conversa aparece como não aberta para todos",
       "status": "Status",
       "statusOpen": "Aberta",
       "statusPending": "Pendente",
