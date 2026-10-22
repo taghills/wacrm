@@ -25,6 +25,7 @@ import {
   Clock,
   ArrowLeft,
   RefreshCw,
+  Mail,
   PanelRightOpen,
   PanelRightClose,
 } from "lucide-react";
@@ -198,6 +199,29 @@ export function MessageThread({
       refreshTimerRef.current = null;
     }, 700);
   }, [isRefreshing, onRefresh]);
+
+  // "Mark as unread": the chat goes back to unread for everyone — bold in
+  // every inbox, and counted again by /api/erp/inbox-counts — so an owner
+  // who read it can leave it for the store to open and answer. The thread
+  // is closed FIRST: while it is open, the reset effect below sets
+  // unread_count back to 0 the moment it sees one.
+  const handleMarkUnread = useCallback(async () => {
+    if (!conversation || !onBack) return;
+    const id = conversation.id;
+    const count = Math.max(1, conversation.unread_count ?? 0);
+    onBack();
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("conversations")
+      .update({ unread_count: count })
+      .eq("id", id);
+    if (error) {
+      console.error("Failed to mark as unread:", error);
+      toast.error(error.message);
+      return;
+    }
+    toast.success(t("markedUnread"));
+  }, [conversation, onBack, t]);
   const [replyTo, setReplyTo] = useState<ReplyDraft | null>(null);
   // Which attachment the media viewer is showing. Lives here rather than in
   // the bubble so the viewer can page through every image/video in the
@@ -966,6 +990,20 @@ export function MessageThread({
               ) : (
                 <PanelRightOpen className="h-4 w-4" />
               )}
+            </button>
+          )}
+
+          {/* Mark as unread — closes the chat and puts it back to unread
+              for everyone. Needs onBack, which is how the thread closes. */}
+          {onBack && (
+            <button
+              type="button"
+              onClick={handleMarkUnread}
+              aria-label={t("markUnread")}
+              title={t("markUnread")}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Mail className="h-3.5 w-3.5" />
             </button>
           )}
 

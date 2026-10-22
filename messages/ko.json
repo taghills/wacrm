@@ -165,6 +165,8 @@
       "showContact": "연락처 표시",
       "refresh": "새로고침",
       "refreshConversation": "대화 새로고침",
+      "markUnread": "읽지 않음으로 표시",
+      "markedUnread": "읽지 않음으로 표시됨 — 모든 사람에게 열지 않은 대화로 보입니다",
       "status": "상태",
       "statusOpen": "열림",
       "statusPending": "대기 중",
