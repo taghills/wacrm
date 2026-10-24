@@ -127,6 +127,48 @@ export function resolveVariables(
   });
 }
 
+/** IDs per `.in()` request: the list is part of the URL, so big lists are fetched in pages. */
+export const ID_CHUNK = 100;
+
+/** Numbers per lookup: one lookup for a ~1,800-number CSV made a ~25 KB URL that the API gateway rejected with a bare "Bad Request". */
+export const PHONE_CHUNK = 150;
+
+/** The account's existing contacts for these normalized numbers, looked up in pages (the `.in()` list is part of the URL). */
+export async function fetchContactsByPhoneKeys(
+  supabase: ReturnType<typeof createClient>,
+  accountId: string,
+  keys: string[],
+): Promise<Contact[]> {
+  const out: Contact[] = [];
+  for (let i = 0; i < keys.length; i += PHONE_CHUNK) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('account_id', accountId)
+      .in('phone_normalized', keys.slice(i, i + PHONE_CHUNK));
+    if (error) throw new Error(`Failed to look up CSV contacts: ${error.message}`);
+    out.push(...((data ?? []) as Contact[]));
+  }
+  return out;
+}
+
+/** Fetch contacts by id in pages (a single `.in('id', …)` for thousands of ids fails with "Bad Request"). */
+export async function fetchContactsByIds(
+  supabase: ReturnType<typeof createClient>,
+  ids: string[],
+): Promise<Contact[]> {
+  const out: Contact[] = [];
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .in('id', ids.slice(i, i + ID_CHUNK));
+    if (error) throw new Error(`Failed to fetch contacts: ${error.message}`);
+    out.push(...((data ?? []) as Contact[]));
+  }
+  return out;
+}
+
 /**
  * Bulk-fetch contact_custom_values for a set of contacts. Returns an
  * index keyed by contact_id → field_id → value.
@@ -138,15 +180,17 @@ async function fetchCustomValueIndex(
   const index: CustomValueIndex = new Map();
   if (contactIds.length === 0) return index;
 
-  // Supabase PostgREST caps the .in(...) IN-clause roughly at 1000
-  // values. Page through to stay safe.
-  const PAGE = 500;
-  for (let i = 0; i < contactIds.length; i += PAGE) {
-    const slice = contactIds.slice(i, i + PAGE);
-    const { data } = await supabase
+  // The .in(...) list travels in the request URL: 500 UUIDs made an
+  // ~18 KB URL, which the API gateway can reject. Pages of ID_CHUNK keep
+  // it near 4 KB, and an error now stops the send instead of silently
+  // leaving every custom field (e.g. the name in a template) empty.
+  for (let i = 0; i < contactIds.length; i += ID_CHUNK) {
+    const slice = contactIds.slice(i, i + ID_CHUNK);
+    const { data, error } = await supabase
       .from('contact_custom_values')
       .select('contact_id, custom_field_id, value')
       .in('contact_id', slice);
+    if (error) throw new Error(`Failed to load custom fields: ${error.message}`);
 
     for (const row of data ?? []) {
       const bucket = index.get(row.contact_id) ?? new Map<string, string>();
@@ -188,12 +232,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         const uniqueContactIds = [
           ...new Set(contactTags.map((ct) => ct.contact_id)),
         ];
-        const { data, error } = await supabase
-          .from('contacts')
-          .select('*')
-          .in('id', uniqueContactIds);
-        if (error) throw new Error(`Failed to fetch contacts: ${error.message}`);
-        contacts = data ?? [];
+        contacts = await fetchContactsByIds(supabase, uniqueContactIds);
       }
     } else if (audience.type === 'custom_field' && audience.customField) {
       contacts = await resolveCustomFieldAudience(supabase, audience.customField);
@@ -258,21 +297,13 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
     }
     const keys = [...uniqueByKey.keys()];
 
-    // Single round-trip lookup of the contacts already in this ACCOUNT.
-    // Scoping to `user_id` missed rows a teammate created on a shared
-    // account, so those numbers looked new and their inserts collided
-    // with the account-wide unique index.
-    const { data: existing, error: lookupErr } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('account_id', accountId)
-      .in('phone_normalized', keys);
-    if (lookupErr) {
-      throw new Error(`Failed to look up CSV contacts: ${lookupErr.message}`);
-    }
-
+    // Look up the contacts already in this ACCOUNT. Scoping to `user_id`
+    // missed rows a teammate created on a shared account, so those numbers
+    // looked new and their inserts collided with the account-wide unique
+    // index.
+    //
     const byKey = new Map<string, Contact>();
-    for (const c of (existing ?? []) as Contact[]) {
+    for (const c of await fetchContactsByPhoneKeys(supabase, accountId, keys)) {
       const key = normalizeKey(c.phone ?? '');
       if (key) byKey.set(key, c);
     }
@@ -336,12 +367,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
     const contactIds = [...new Set((matches ?? []).map((m) => m.contact_id))];
     if (contactIds.length === 0) return [];
 
-    const { data, error } = await supabase
-      .from('contacts')
-      .select('*')
-      .in('id', contactIds);
-    if (error) throw new Error(`Failed to fetch contacts: ${error.message}`);
-    return data ?? [];
+    return fetchContactsByIds(supabase, contactIds);
   }
 
   async function createAndSendBroadcast(payload: BroadcastPayload): Promise<string> {
