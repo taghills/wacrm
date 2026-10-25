@@ -40,7 +40,9 @@
     "menuProfile": "Profile",
     "menuSettings": "Settings",
     "menuSignOut": "Sign out",
-    "messageActivity": "Message activity"
+    "messageActivity": "Message activity",
+    "expandMenu": "Expand menu",
+    "collapseMenu": "Collapse menu"
   },
   "Header": {
     "dashboard": "Dashboard",

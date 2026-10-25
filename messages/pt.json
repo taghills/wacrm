@@ -40,7 +40,9 @@
     "menuProfile": "Perfil",
     "menuSettings": "Configurações",
     "menuSignOut": "Sair",
-    "messageActivity": "Atividade de mensagens"
+    "messageActivity": "Atividade de mensagens",
+    "expandMenu": "Expandir menu",
+    "collapseMenu": "Recolher menu"
   },
   "Header": {
     "dashboard": "Painel",

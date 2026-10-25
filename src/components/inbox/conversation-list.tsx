@@ -34,6 +34,8 @@ interface ConversationListProps {
    * or the tab was throttled. Optional so existing callers keep working.
    */
   resyncToken?: number;
+  /** Inside the ERP's iframe: a slightly narrower list, so the thread gets more room. */
+  compact?: boolean;
 }
 
 const STATUS_COLORS: Record<ConversationStatus, string> = {
@@ -52,6 +54,7 @@ export function ConversationList({
   conversations,
   onConversationsLoaded,
   resyncToken = 0,
+  compact = false,
 }: ConversationListProps) {
   const t = useTranslations("Inbox.conversationList");
   
@@ -223,7 +226,7 @@ export function ConversationList({
     // w-full on mobile so the list occupies the whole viewport when it's
     // the single pane showing; fixed 320px on desktop where it shares the
     // row with the thread + contact sidebar.
-    <div className="flex h-full w-full flex-col border-r border-border bg-card lg:w-80">
+    <div className={cn("flex h-full w-full flex-col border-r border-border bg-card lg:w-80", compact && "lg:w-72")}>
       {/* Search + Filter */}
       <div className="space-y-2 border-b border-border p-3">
         <div className="relative">

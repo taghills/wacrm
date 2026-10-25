@@ -40,7 +40,9 @@
     "menuProfile": "프로필",
     "menuSettings": "설정",
     "menuSignOut": "로그아웃",
-    "messageActivity": "메시지 활동"
+    "messageActivity": "메시지 활동",
+    "expandMenu": "메뉴 펼치기",
+    "collapseMenu": "메뉴 접기"
   },
   "Header": {
     "dashboard": "대시보드",
