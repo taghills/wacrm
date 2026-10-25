@@ -16,6 +16,7 @@ import { ContactSidebar } from "@/components/inbox/contact-sidebar";
 import { toast } from "sonner";
 import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isEmbeddedWindow, useEmbedded } from "@/hooks/use-embedded";
 
 // Remembers the agent's show/hide choice for the desktop contact panel
 // across reloads and sessions (device-scoped, like the theme prefs).
@@ -69,10 +70,15 @@ function InboxPageInner() {
    * below reconciles to the stored value right after mount instead.
    */
   const [contactPanelOpen, setContactPanelOpen] = useState(true);
+  // Inside the ERP's iframe the width is shared with the ERP's own menu,
+  // so the contact panel starts closed there (the thread-header toggle
+  // opens it; a saved choice always wins).
+  const embedded = useEmbedded();
   useEffect(() => {
     try {
       const stored = localStorage.getItem(CONTACT_PANEL_STORAGE_KEY);
       if (stored !== null) setContactPanelOpen(stored === "true");
+      else if (isEmbeddedWindow()) setContactPanelOpen(false);
     } catch {
       // localStorage can throw in private-browsing / sandboxed contexts.
     }
@@ -562,7 +568,13 @@ function InboxPageInner() {
   const hasActiveConv = !!activeConversation;
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden sm:-m-6">
+    <div
+      className={cn(
+        "flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden",
+        // cancels the shell's padding (tighter when embedded in the ERP)
+        embedded ? "-m-2 sm:-m-3" : "-m-4 sm:-m-6",
+      )}
+    >
       {/* WhatsApp connection banner — in the flex column, not absolute,
           so it pushes the panels down instead of overlapping them. */}
       {whatsappConnected === false && (
@@ -585,6 +597,7 @@ function InboxPageInner() {
           )}
         >
           <ConversationList
+            compact={embedded}
             activeConversationId={activeConversation?.id ?? null}
             onSelect={handleSelectConversation}
             conversations={conversations}

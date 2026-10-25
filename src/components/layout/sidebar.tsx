@@ -15,6 +15,8 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Radio,
   Settings,
   Shield,
@@ -120,6 +122,10 @@ interface SidebarProps {
   /** Controlled on mobile by the Header's hamburger button. Ignored on lg+. */
   open?: boolean;
   onClose?: () => void;
+  /** Inside the ERP's iframe: desktop menu as a narrow icon rail (labels show on hover). */
+  compact?: boolean;
+  /** Present only when embedded: switches between the icon rail and the full menu. */
+  onToggleCompact?: () => void;
 }
 
 import { useTranslations } from "next-intl";
@@ -127,7 +133,7 @@ import { WhatsAppGlyph } from "@/components/brand/whatsapp-logo";
 import { useAccess } from "@/hooks/use-access";
 import type { AccessModule } from "@/lib/access/modules";
 
-export function Sidebar({ open = false, onClose }: SidebarProps) {
+export function Sidebar({ open = false, onClose, compact = false, onToggleCompact }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
@@ -199,17 +205,18 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           open ? "translate-x-0" : "-translate-x-full",
           // Desktop: static, always visible — reset all the mobile framing.
           "lg:static lg:z-0 lg:w-60 lg:translate-x-0 lg:transition-none",
+          compact && "lg:w-16",
         )}
         aria-label={t("primaryNav")}
       >
         {/* Logo row. On mobile we put a close button here; on desktop the
             close button is hidden since the sidebar is always-visible. */}
-        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
+        <div className={cn("flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4", compact && "lg:justify-center lg:px-0")}>
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#25D366] text-white">
               <WhatsAppGlyph className="h-[18px] w-[18px]" />
             </div>
-            <span className="text-sm font-semibold text-foreground">
+            <span className={cn("text-sm font-semibold text-foreground", compact && "lg:hidden")}>
               {t("title")}
             </span>
           </div>
@@ -224,7 +231,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         </div>
 
         {/* Main navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <nav className={cn("flex-1 overflow-y-auto px-3 py-4", compact && "lg:px-2")}>
           <ul className="flex flex-col gap-1">
             {navItems
               .filter(
@@ -250,20 +257,22 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    title={compact ? t(item.labelKey as string) : undefined}
                     className={cn(
                       // Taller on mobile so fingers can hit the row reliably (≥44px).
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
+                      compact && "lg:relative lg:justify-center lg:px-0 lg:py-2.5",
                       isActive
                         ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
-                    <item.icon className="h-4 w-4" />
-                    <span className="flex-1">{t(item.labelKey as string)}</span>
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span className={cn("flex-1", compact && "lg:hidden")}>{t(item.labelKey as string)}</span>
                     {item.beta && (
                       <span
                         aria-label={t("beta")}
-                        className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
+                        className={cn("rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300", compact && "lg:hidden")}
                       >
                         {t("beta")}
                       </span>
@@ -271,7 +280,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                     {showUnreadDot && (
                       <span
                         aria-label={t("unreadConversations", { count: totalUnread })}
-                        className="relative flex h-2 w-2"
+                        className={cn("relative flex h-2 w-2", compact && "lg:absolute lg:right-2 lg:top-2")}
                       >
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
                         <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
@@ -280,7 +289,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                     {showNotificationBadge && (
                       <span
                         aria-label={t("unreadNotifications", { count: unreadNotifications })}
-                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
+                        className={cn("flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground", compact && "lg:absolute lg:-right-0.5 lg:-top-0.5 lg:h-4 lg:min-w-4 lg:text-[9px]")}
                       >
                         {unreadNotifications > 9 ? "9+" : unreadNotifications}
                       </span>
@@ -305,24 +314,43 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    title={compact ? t(item.labelKey as string) : undefined}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
+                      compact && "lg:justify-center lg:px-0 lg:py-2.5",
                       isActive
                         ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
-                    <item.icon className="h-4 w-4" />
-                    {t(item.labelKey as string)}
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span className={cn(compact && "lg:hidden")}>{t(item.labelKey as string)}</span>
                   </Link>
                 </li>
               );
             })}
           </ul>
+
+          {/* Embedded in the ERP only: switch between the icon rail and the full menu. */}
+          {onToggleCompact && (
+            <button
+              type="button"
+              onClick={onToggleCompact}
+              title={compact ? t("expandMenu") : t("collapseMenu")}
+              aria-label={compact ? t("expandMenu") : t("collapseMenu")}
+              className={cn(
+                "mt-3 hidden w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:flex",
+                compact && "lg:justify-center lg:px-0",
+              )}
+            >
+              {compact ? <PanelLeftOpen className="h-4 w-4 shrink-0" /> : <PanelLeftClose className="h-4 w-4 shrink-0" />}
+              <span className={cn(compact && "lg:hidden")}>{t("collapseMenu")}</span>
+            </button>
+          )}
         </nav>
 
         {/* User section */}
-        <div className="shrink-0 border-t border-border p-3">
+        <div className={cn("shrink-0 border-t border-border p-3", compact && "lg:px-2")}>
           {/* Account name display — surfaced only when the account
               name differs from the user's own name (see
               `showAccountStrip`). For a default solo account the two
@@ -330,7 +358,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               below; for renamed or shared accounts it tells the user
               which account they're acting in. */}
           {showAccountStrip && account?.name ? (
-            <div className="mb-2 flex items-center gap-2 px-3 text-xs text-muted-foreground">
+            <div className={cn("mb-2 flex items-center gap-2 px-3 text-xs text-muted-foreground", compact && "lg:hidden")}>
               <UsersRound className="size-3.5 shrink-0" />
               {/* `title=` exposes the full name on hover when it
                   gets truncated (long account names + narrow
@@ -359,7 +387,10 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             </div>
           ) : null}
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60">
+            <DropdownMenuTrigger
+              title={compact ? (profile?.full_name ?? t("defaultUser")) : undefined}
+              className={cn("flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60", compact && "lg:justify-center lg:px-0")}
+            >
               <Avatar className="size-8 shrink-0">
                 {profile?.avatar_url ? (
                   <AvatarImage
@@ -373,7 +404,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                     "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="min-w-0 flex-1">
+              <div className={cn("min-w-0 flex-1", compact && "lg:hidden")}>
                 <p className="truncate text-sm font-medium text-foreground">
                   {profile?.full_name ?? t("defaultUser")}
                 </p>

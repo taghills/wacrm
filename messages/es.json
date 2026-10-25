@@ -40,7 +40,9 @@
     "menuProfile": "Perfil",
     "menuSettings": "Configuración",
     "menuSignOut": "Cerrar sesión",
-    "messageActivity": "Actividad de mensajes"
+    "messageActivity": "Actividad de mensajes",
+    "expandMenu": "Expandir menú",
+    "collapseMenu": "Contraer menú"
   },
   "Header": {
     "dashboard": "Panel",
