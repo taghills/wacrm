@@ -290,6 +290,37 @@ which does not store the message id, so a replayed `ping` or
 happened. Storing the message id removes this, and is what the
 per-event status endpoint needs anyway.
 
+## Pull mode — the CRM collects the events
+
+The ERP normally pushes batches to `/api/erp/events`. This deployment's
+host has refused those pushes at the network level more than once (CDN
+bot check, LiteSpeed captcha, TCP resets of the ERP host's shared
+outgoing address), while the CRM calling the ERP always works. So the
+CRM also collects (`src/lib/erp/pull.ts`, started from
+`src/instrumentation.ts` when the server boots):
+
+1. Every 30 s: `POST <ERP>/api/crm/pull` with `{ "source": "wacrm", "at": "<ISO time>" }`.
+   The ERP answers `{ "batch": null }` or `{ "batch": { "body", "signature", "ids" } }`:
+   the exact raw body and `X-ERP-Signature` a push would have carried. Those events are
+   leased for 5 minutes, so two CRM workers never get the same event.
+2. The batch runs through the normal `POST` handler of `/api/erp/events` — same Bearer and
+   signature checks, same ledger, dedupe and templates. A batch whose signature does not
+   verify is not processed.
+3. `POST <ERP>/api/crm/pull/ack` with `{ "ids", "status", "response" }` — the handler's
+   status and JSON, which the ERP records exactly like a push response.
+
+Both calls to the ERP are signed the usual way: `Authorization: Bearer <ERP_API_KEY>` and
+`X-ERP-Signature: sha256=<hmac(raw body, ERP_SHARED_SECRET)>`; the ERP refuses an `at`
+more than 5 minutes off. While pulls keep arriving, the ERP stops pushing; if the CRM stops
+collecting, the ERP resumes pushing after 3 minutes.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ERP_PULL` | on | `off` switches collecting off |
+| `ERP_BASE_URL` | `https://taghills-backend.onrender.com` | the ERP's API origin |
+
+Collecting only runs when `ERP_API_KEY` and `ERP_SHARED_SECRET` are set.
+
 ## Idempotency
 
 The ERP retries a failed batch 8 times with backoff, and may re-deliver
