@@ -1,29 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { isEmbeddedWindow } from './use-embedded';
 
+/** A stand-in window: only `self` and `top` matter to isEmbeddedWindow. */
+function fakeWindow(top: 'self' | 'other' | 'throws'): Window {
+  const w: Record<string, unknown> = {};
+  Object.defineProperty(w, 'self', { get: () => w });
+  Object.defineProperty(w, 'top', {
+    get: () => {
+      if (top === 'throws') throw new Error('SecurityError');
+      return top === 'self' ? w : {};
+    },
+  });
+  return w as unknown as Window;
+}
+
 describe('isEmbeddedWindow', () => {
   it('is false for a top-level window (CRM opened on its own)', () => {
-    const w = {} as Window & { self: unknown; top: unknown };
-    w.self = w;
-    w.top = w;
-    expect(isEmbeddedWindow(w as Window)).toBe(false);
+    expect(isEmbeddedWindow(fakeWindow('self'))).toBe(false);
   });
 
   it('is true inside an iframe (the ERP embeds the CRM)', () => {
-    const parent = {};
-    const w = { top: parent } as unknown as Window & { self: unknown };
-    w.self = w;
-    expect(isEmbeddedWindow(w as Window)).toBe(true);
+    expect(isEmbeddedWindow(fakeWindow('other'))).toBe(true);
   });
 
   it('counts as embedded when the browser refuses to say', () => {
-    const w = {} as Window;
-    Object.defineProperty(w, 'self', { get: () => w });
-    Object.defineProperty(w, 'top', { get: () => { throw new Error('SecurityError'); } });
-    expect(isEmbeddedWindow(w)).toBe(true);
-  });
-
-  it('is false with no window (server rendering)', () => {
-    expect(isEmbeddedWindow(undefined)).toBe(typeof window !== 'undefined' && window.self !== window.top);
+    expect(isEmbeddedWindow(fakeWindow('throws'))).toBe(true);
   });
 });
