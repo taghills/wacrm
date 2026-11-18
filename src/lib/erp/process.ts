@@ -306,13 +306,21 @@ export async function syncContactFromErp(
   customer: ErpCustomer,
 ): Promise<ContactSync> {
   const synced = await saveContactFields(ctx, contact, customer);
-  await applyErpTag(ctx, contact.id);
-  await applyCustomValues(ctx, contact.id, customer);
+  await applyErpTag(ctx, synced.contact.id);
+  await applyCustomValues(ctx, synced.contact.id, customer);
   return synced;
 }
 
 /** What `saveContactFields` left on the contact. */
 export interface ContactSync {
+  /**
+   * The contact this event belongs to from now on. Usually the one
+   * passed in; when the corrected number already belonged to another
+   * contact, that other contact (the ERP link was moved onto it).
+   */
+  contact: ResolvedContact;
+  /** Set when the ERP link moved: the id of the contact it left. */
+  movedFrom: string | null;
   /**
    * The number stored on the contact now. The ONLY number a message
    * for this event may go to: the contact was read before the save,
@@ -320,9 +328,9 @@ export interface ContactSync {
    */
   phone: string;
   /**
-   * The ERP's new number when it could NOT be stored because another
-   * CRM contact already has it. The contact still holds the old —
-   * per the ERP, wrong — number, so nothing may be sent for it.
+   * The ERP's new number when it could NOT be stored or moved to.
+   * The contact still holds the old — per the ERP, wrong — number,
+   * so nothing may be sent for it.
    */
   phoneBlockedBy: string | null;
 }
@@ -333,10 +341,14 @@ export interface ContactSync {
  * A number change is how a wrong number gets corrected, so it is
  * never dropped silently:
  *  - saved: the caller sends to the new number, this same event;
- *  - another contact already has the number (unique index, 23505 —
- *    e.g. the customer once messaged from it): the other fields are
- *    still saved, and `phoneBlockedBy` tells the caller to send
- *    nothing rather than message the old number;
+ *  - another contact already has the number (unique index, 23505):
+ *    normal, because families share one number. That contact is the
+ *    right one to message, so the ERP link moves onto it and the old
+ *    contact is left as it is — its number may be other customers'
+ *    real number, so it is never changed or deleted here;
+ *  - the number is taken but its owner can't be found: the other
+ *    fields are still saved, and `phoneBlockedBy` tells the caller to
+ *    send nothing rather than message the old number;
  *  - any other error: thrown, so the ERP retries the event.
  */
 export async function saveContactFields(
@@ -373,27 +385,80 @@ export async function saveContactFields(
   if (!newPhone) {
     const { error } = await save(patch);
     if (error) console.warn('[erp] contact update skipped:', error.message);
-    return { phone: contact.phone, phoneBlockedBy: null };
+    return { contact, movedFrom: null, phone: contact.phone, phoneBlockedBy: null };
   }
 
   const { error } = await save({ ...patch, phone: newPhone });
-  if (!error) return { phone: newPhone, phoneBlockedBy: null };
+  if (!error) {
+    return {
+      contact: { ...contact, phone: newPhone },
+      movedFrom: null,
+      phone: newPhone,
+      phoneBlockedBy: null,
+    };
+  }
 
   if (!isUniqueViolation(error)) {
     throw new Error(`Failed to save the new number on the contact: ${error.message}`);
   }
-  console.warn('[erp] number change blocked: another contact already has the new number');
+
+  // Another contact already has the corrected number. Move the ERP
+  // link onto that contact and message it. Unlink first: the ERP id
+  // is unique per account, so the owner can only take it once it is
+  // free.
+  const owner = await findExistingContact(db, accountId, newPhone);
+  if (owner && owner.id !== contact.id) {
+    const now = new Date().toISOString();
+    if (customer.erpCustomerId) {
+      const { error: unlink } = await db
+        .from('contacts')
+        .update({ erp_customer_id: null, updated_at: now })
+        .eq('id', contact.id)
+        .eq('account_id', accountId)
+        .eq('erp_customer_id', customer.erpCustomerId);
+      if (unlink) {
+        throw new Error(`Failed to move the ERP link off the old contact: ${unlink.message}`);
+      }
+    }
+    const { error: moved } = await db
+      .from('contacts')
+      .update(patch)
+      .eq('id', owner.id)
+      .eq('account_id', accountId);
+    if (moved) {
+      throw new Error(`Failed to move the ERP link onto the contact for the new number: ${moved.message}`);
+    }
+    return {
+      contact: {
+        id: owner.id,
+        phone: owner.phone,
+        marketingOptOut: Boolean(
+          (owner as Record<string, unknown>).marketing_opt_out,
+        ),
+      },
+      movedFrom: contact.id,
+      phone: owner.phone,
+      phoneBlockedBy: null,
+    };
+  }
+
+  console.warn('[erp] number change blocked: the new number is taken but its contact was not found');
   const { error: rest } = await save(patch);
   if (rest) console.warn('[erp] contact update skipped:', rest.message);
-  return { phone: contact.phone, phoneBlockedBy: newPhone };
+  return { contact, movedFrom: null, phone: contact.phone, phoneBlockedBy: newPhone };
+}
+
+/** The ledger note for an event whose corrected number belonged to another contact. */
+export function movedNumberNote(newPhone: string): string {
+  return `number corrected to ${newPhone}: that number already had a CRM contact (e.g. shared by a family), so this customer now uses it; the old contact was left unchanged`;
 }
 
 /** The ledger text for an event withheld because the new number could not be saved. */
 export function blockedNumberDetail(oldPhone: string, newPhone: string): string {
   return (
-    `not sent: the ERP changed this customer's number to ${newPhone}, but another CRM contact ` +
-    `already has that number, so this contact still has the old one (${oldPhone}). ` +
-    'Sort out the two contacts in the CRM, then resend from the ERP.'
+    `not sent: the ERP changed this customer's number to ${newPhone}, but it could not be saved ` +
+    `on the CRM contact, which still has the old one (${oldPhone}). ` +
+    'Check the contacts for both numbers in the CRM, then resend from the ERP.'
   );
 }
 
@@ -688,12 +753,15 @@ export async function processErpEvent(
     return { status: 'skipped', detail: 'event carries no customer' };
   }
 
-  const contact = await findOrCreateErpContact(ctx, customer);
-  if (!contact) {
+  const found = await findOrCreateErpContact(ctx, customer);
+  if (!found) {
     return { status: 'skipped', detail: 'customer has no valid phone number' };
   }
 
-  const synced = await syncContactFromErp(ctx, contact, customer);
+  const synced = await syncContactFromErp(ctx, found, customer);
+  // From here on, the contact the sync settled on: when a corrected
+  // number already belonged to another contact, that one.
+  const contact = synced.contact;
 
   const branch = extractBranch(event);
   // Every return below carries the filing outcome, because "the
@@ -708,7 +776,10 @@ export async function processErpEvent(
         extractBranchReviewUrl(event),
       )
     : null;
-  const note = storeLinkNote(link);
+  const note = withNote(
+    synced.movedFrom ? movedNumberNote(synced.phone) : undefined,
+    storeLinkNote(link),
+  ) ?? null;
   // The bill number, for Message activity's search and for the row
   // itself. Same key the review queue uses, so one order reads the
   // same in both places.
