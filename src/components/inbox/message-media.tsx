@@ -14,6 +14,7 @@ import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types";
 import { downloadMediaMessage } from "@/lib/media/download";
+import { documentParts } from "@/lib/media/filename";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
 
 /**
@@ -253,24 +254,33 @@ export function MediaDocumentBubble({
   t: Translator;
 }) {
   const { downloading, download } = useMediaDownload(message, t);
+  // The file box shows a short name; a caption (e.g. the ERP's whole receipt
+  // message) goes underneath as normal wrapped text instead of being cut off
+  // inside the one-line label.
+  const { name, caption } = documentParts(message);
 
   return (
-    <div className="flex items-center gap-2">
-      <a
-        href={message.media_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm hover:bg-muted"
-      >
-        <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-        <span className="truncate">{message.content_text || t("document")}</span>
-      </a>
-      <MediaActionButton
-        icon={Download}
-        label={t("download")}
-        onClick={download}
-        busy={downloading}
-      />
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <a
+          href={message.media_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm hover:bg-muted"
+        >
+          <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <span className="truncate">{name || t("document")}</span>
+        </a>
+        <MediaActionButton
+          icon={Download}
+          label={t("download")}
+          onClick={download}
+          busy={downloading}
+        />
+      </div>
+      {caption && (
+        <p className="whitespace-pre-wrap break-words text-sm">{caption}</p>
+      )}
     </div>
   );
 }
