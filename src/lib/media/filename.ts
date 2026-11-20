@@ -128,6 +128,23 @@ export function basenameFromUrl(url: string): string {
   return hasExtension(withoutStamp) ? sanitizeFilename(withoutStamp) : "";
 }
 
+/**
+ * A document message's text is either its filename (what the webhook stores for
+ * an inbound file, or the composer for an upload with no caption) or a caption
+ * the sender wrote — the ERP's receipts and invoices carry the whole message
+ * there. Splits it into the name for the file box and the caption to show
+ * underneath, so a long caption is never squeezed into a one-line file label.
+ */
+export function documentParts(message: { content_text?: string; media_url?: string }): {
+  name: string;
+  caption: string;
+} {
+  const text = (message.content_text ?? "").trim();
+  const isName = text !== "" && text.length <= 120 && !/[\r\n]/.test(text) && hasExtension(text);
+  if (isName) return { name: text, caption: "" };
+  return { name: message.media_url ? basenameFromUrl(message.media_url) : "", caption: text };
+}
+
 export interface MediaFilenameInput {
   content_type: ContentType;
   content_text?: string;

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   basenameFromUrl,
+  documentParts,
   extensionForMime,
   mediaFilename,
   sanitizeFilename,
@@ -249,5 +250,31 @@ describe("mediaFilename", () => {
         "application/pdf",
       ),
     ).toBe("invoice.pdf");
+  });
+});
+
+describe("documentParts", () => {
+  it("keeps a real filename as the name, with no caption", () => {
+    expect(documentParts({ content_text: "Invoice SO-0015.pdf" })).toEqual({ name: "Invoice SO-0015.pdf", caption: "" });
+  });
+
+  it("moves a long caption out of the file label", () => {
+    const text = "Your order is placed. Balance: Rs.350. Call us if you need anything.";
+    expect(documentParts({ content_text: text, media_url: "https://example.com/files/receipt.pdf?sig=x" }))
+      .toEqual({ name: "receipt.pdf", caption: text });
+  });
+
+  it("a caption ending with a full stop is still a caption", () => {
+    expect(documentParts({ content_text: "Thank you." }).caption).toBe("Thank you.");
+  });
+
+  it("a multi-line text is a caption even if it ends like a file", () => {
+    const text = ["See the bill", "bill.pdf"].join(String.fromCharCode(10));
+    expect(documentParts({ content_text: text }).caption).toBe(text);
+  });
+
+  it("no usable name: the box falls back to its default label", () => {
+    expect(documentParts({ content_text: "Hello there", media_url: "https://example.com/api/pdf/123" })).toEqual({ name: "", caption: "Hello there" });
+    expect(documentParts({})).toEqual({ name: "", caption: "" });
   });
 });
