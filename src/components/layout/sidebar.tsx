@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
+import { useUndeliveredCount } from "@/hooks/use-undelivered";
 import {
   Bell,
   Bot,
@@ -143,6 +144,8 @@ export function Sidebar({ open = false, onClose, compact = false, onToggleCompac
   // note in @/lib/access/modules.
   const access = useAccess();
   const unreadNotifications = useUnreadNotifications();
+  // Messages WhatsApp could not deliver, new since Message activity was last opened.
+  const undelivered = useUndeliveredCount();
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it
@@ -253,6 +256,9 @@ export function Sidebar({ open = false, onClose, compact = false, onToggleCompac
               const showNotificationBadge =
                 item.href === "/notifications" && unreadNotifications > 0;
 
+              const showUndeliveredBadge =
+                item.href === "/message-activity" && undelivered > 0;
+
               return (
                 <li key={item.href}>
                   <Link
@@ -292,6 +298,15 @@ export function Sidebar({ open = false, onClose, compact = false, onToggleCompac
                         className={cn("flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground", compact && "lg:absolute lg:-right-0.5 lg:-top-0.5 lg:h-4 lg:min-w-4 lg:text-[9px]")}
                       >
                         {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                      </span>
+                    )}
+                    {showUndeliveredBadge && (
+                      <span
+                        aria-label={t("undeliveredMessages", { count: undelivered })}
+                        title={t("undeliveredMessages", { count: undelivered })}
+                        className={cn("flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white", compact && "lg:absolute lg:-right-0.5 lg:-top-0.5 lg:h-4 lg:min-w-4 lg:text-[9px]")}
+                      >
+                        {undelivered > 9 ? "9+" : undelivered}
                       </span>
                     )}
                   </Link>

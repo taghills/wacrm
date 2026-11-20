@@ -6,6 +6,8 @@
 // 30 seconds.
 
 import { pullConfig, startErpPull } from './lib/erp/pull';
+import { reportDeliveryFailures } from './lib/erp/delivery-report';
+import { supabaseAdmin } from './lib/flows/admin-client';
 import { POST as handleErpEvents } from './app/api/erp/events/route';
 
 export async function startNodeJobs() {
@@ -31,5 +33,7 @@ export async function startNodeJobs() {
       try { json = await res.json(); } catch { /* empty body */ }
       return { status: res.status, json };
     },
+    // Then tell the ERP which of its messages WhatsApp could not deliver.
+    afterTick: (post) => reportDeliveryFailures(supabaseAdmin(), post),
   });
 }

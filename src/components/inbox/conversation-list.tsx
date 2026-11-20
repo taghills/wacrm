@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { undeliveredConversations, useFailedMessages } from "@/hooks/use-undelivered";
 import {
   CONVERSATION_SELECT,
   matchesContactFilters,
@@ -57,6 +58,12 @@ export function ConversationList({
   compact = false,
 }: ConversationListProps) {
   const t = useTranslations("Inbox.conversationList");
+  // Chats whose latest message WhatsApp could not deliver get a red mark.
+  const failedMessages = useFailedMessages(resyncToken);
+  const undelivered = useMemo(
+    () => undeliveredConversations(failedMessages, conversations),
+    [failedMessages, conversations],
+  );
   
   const FILTER_OPTIONS: { label: string; value: InboxFilter }[] = useMemo(() => [
     { label: t("filterAll"), value: "all" },
@@ -416,6 +423,7 @@ export function ConversationList({
                 conversation={conv}
                 isActive={conv.id === activeConversationId}
                 onSelect={handleSelect}
+                undelivered={undelivered.has(conv.id)}
                 t={t}
               />
             ))}
@@ -430,6 +438,7 @@ interface ConversationItemProps {
   conversation: Conversation;
   isActive: boolean;
   onSelect: (conversation: Conversation) => void;
+  undelivered?: boolean;
   t: ReturnType<typeof useTranslations>;
 }
 
@@ -437,6 +446,7 @@ function ConversationItem({
   conversation,
   isActive,
   onSelect,
+  undelivered = false,
   t,
 }: ConversationItemProps) {
   const contact = conversation.contact;
@@ -487,6 +497,14 @@ function ConversationItem({
             {conversation.last_message_text || t("noMessagesYet")}
           </p>
           <div className="flex shrink-0 items-center gap-1.5">
+            {undelivered && (
+              <span
+                title={t("undeliveredHint")}
+                className="rounded-full border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-600 dark:text-red-400"
+              >
+                {t("undelivered")}
+              </span>
+            )}
             {conversation.unread_count > 0 && (
               <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
                 {conversation.unread_count}

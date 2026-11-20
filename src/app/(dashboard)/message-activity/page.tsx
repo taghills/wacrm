@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { formatDistanceToNow } from "date-fns";
+import { markUndeliveredSeen } from "@/hooks/use-undelivered";
 import {
   AlertCircle,
   Check,
@@ -63,6 +64,10 @@ function defaultSince(): string {
 
 export default function MessageActivityPage() {
   const t = useTranslations("MessageActivity");
+  // Opening this screen clears the sidebar's red "not delivered" count.
+  useEffect(() => {
+    markUndeliveredSeen();
+  }, []);
   const [data, setData] = useState<ActivityResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

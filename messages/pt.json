@@ -42,7 +42,8 @@
     "menuSignOut": "Sair",
     "messageActivity": "Atividade de mensagens",
     "expandMenu": "Expandir menu",
-    "collapseMenu": "Recolher menu"
+    "collapseMenu": "Recolher menu",
+    "undeliveredMessages": "{count, plural, one {# message} other {# messages}} WhatsApp could not deliver"
   },
   "Header": {
     "dashboard": "Painel",
@@ -157,7 +158,9 @@
       "clearAll": "Limpar tudo",
       "noConversations": "Nenhuma conversa encontrada",
       "noMessagesYet": "Nenhuma mensagem ainda",
-      "unknown": "Desconhecido"
+      "unknown": "Desconhecido",
+      "undelivered": "Not delivered",
+      "undeliveredHint": "WhatsApp could not deliver the last message — check the number"
     },
     "messageThread": {
       "backToConversations": "Voltar às conversas",

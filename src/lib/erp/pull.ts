@@ -62,6 +62,12 @@ export interface PullDeps {
   handle: BatchHandler;
   now?: () => Date;
   log?: (msg: string) => void;
+  /**
+   * Runs once at the end of every tick with a signed POST to the ERP —
+   * used to report messages WhatsApp could not deliver
+   * (`@/lib/erp/delivery-report`). Its failure is logged, never fatal.
+   */
+  afterTick?: (post: (path: string, payload: unknown) => Promise<{ ok: boolean; status: number; json: unknown }>) => Promise<unknown>;
 }
 
 async function signedPost(deps: PullDeps, cfg: PullConfig, path: string, payload: unknown) {
@@ -119,9 +125,20 @@ export async function pullOnce(cfg: PullConfig, deps: PullDeps): Promise<PullRes
   return { kind: 'processed', count: ids.length, status };
 }
 
-/** One timer tick: drain while batches come back full. */
+/** One timer tick: drain while batches come back full, then run `afterTick`. */
 export async function pullTick(cfg: PullConfig, deps: PullDeps): Promise<void> {
   const log = deps.log ?? ((m: string) => console.warn(m));
+  await drain(cfg, deps, log);
+  if (deps.afterTick) {
+    try {
+      await deps.afterTick((path, payload) => signedPost(deps, cfg, path, payload));
+    } catch (err) {
+      log(`[erp/pull] ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
+async function drain(cfg: PullConfig, deps: PullDeps, log: (m: string) => void): Promise<void> {
   for (let i = 0; i < MAX_BATCHES_PER_TICK; i++) {
     let r: PullResult;
     try {

@@ -93,4 +93,23 @@ describe('pullTick', () => {
     expect(calls).toHaveLength(1);
     expect(logs[0]).toMatch(/HTTP 401/);
   });
+  it('runs afterTick once with a signed POST, even after the ERP refused the pull', async () => {
+    const { calls, fetchFn } = fakeErp([], 401);
+    let ran = 0;
+    await pullTick(cfg, {
+      fetch: fetchFn, handle: async () => ({ status: 200, json: {} }), log: () => {},
+      afterTick: async (post) => { ran++; await post('/api/crm/pull/delivery', { reports: [] }); },
+    });
+    expect(ran).toBe(1);
+    const d = calls.find((c) => c.path === '/api/crm/pull/delivery');
+    expect(d?.sigOk).toBe(true);
+    expect(d?.auth).toBe('Bearer k');
+  });
+
+  it('an afterTick error is logged, not thrown', async () => {
+    const logs: string[] = [];
+    const { fetchFn } = fakeErp([null]);
+    await pullTick(cfg, { fetch: fetchFn, handle: async () => ({ status: 200, json: {} }), log: (m) => logs.push(m), afterTick: async () => { throw new Error('nope'); } });
+    expect(logs.some((l) => /nope/.test(l))).toBe(true);
+  });
 });
